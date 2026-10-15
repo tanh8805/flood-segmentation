@@ -1,0 +1,17 @@
+# Môi trường offline để gán nhãn (pseudo-label) và tạo dataset. Phiên bản được ghim vì
+# V-FloodNet là pickle của cả model: smp/timm/efficientnet_pytorch bản mới hơn làm unpickle lỗi.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+ultralytics==8.4.177
+transformers==5.0.0
+opencv-python-headless
+numpy
+pillow
+pyyaml
+pandas
+timm==0.6.13
+efficientnet_pytorch==0.6.3
+# cài riêng, không kéo phụ thuộc:  pip install --no-deps segmentation_models_pytorch==0.2.0
+# tải dữ liệu: kaggle (>=1.8), imageio-ffmpeg không cần
+kaggle>=1.8
