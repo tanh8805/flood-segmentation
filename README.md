@@ -72,7 +72,7 @@ Job lưu trong bộ nhớ (tắt server là mất danh sách), video được x�
    | 3 | Nguy hiểm | không dùng độ phủ | `car_deep` |
 
 3. Chia video thành đoạn 2 giây (`SEGMENT_SECONDS`). Mức của đoạn là mức cao nhất mà ít nhất 50% khung hình trong đoạn đạt được, nên vài khung hình nhận nhầm không làm mức nhảy lung tung.
-4. **Giữ mức** (`LEVEL_HOLD_SECONDS`, 6 giây): mức tăng thì đổi ngay, muốn giảm phải thấp hơn liên tục 6 giây (lấp những đoạn model sót nước vì bị che). Chỉ giữ mức trong cùng một cảnh; chuyển cảnh được phát hiện bằng histogram màu (`SCENE_CUT`) và thời điểm nằm trong `scene_cuts`.
+4. **Giữ mức** (`LEVEL_HOLD_SECONDS`, mặc định 0 = tắt): mặc định mức luôn là mức thật của đoạn đang phát, đoạn không có nước là An toàn. Đặt > 0 (ví dụ 6) thì mức tăng đổi ngay, còn muốn giảm phải thấp hơn liên tục bấy nhiêu giây (lấp những đoạn model sót nước vì bị che). Chỉ giữ mức trong cùng một cảnh; chuyển cảnh được phát hiện bằng histogram màu (`SCENE_CUT`) và thời điểm nằm trong `scene_cuts`.
 5. Các đoạn liền nhau cùng mức được gộp thành **giai đoạn**; mức cả video là mức cao nhất.
 6. Đoạn không có xe nào: thanh cảnh báo và JSON (`note` ở đoạn, giai đoạn và kết quả chung) ghi "không có xe để ước lượng độ sâu", nghĩa là mức chỉ dựa vào độ phủ.
 
@@ -85,7 +85,7 @@ Ngưỡng nằm trong `LEVELS` của `analyzer.py`. Các tham số khác chỉnh
 | `INFER_FPS` | 5 | số lần chạy model mỗi giây video |
 | `ROAD_MIN_FRAC` | 0.05 | đường chiếm ít nhất bao nhiêu khung hình mới coi là thấy đường |
 | `FLOOD_COVER_MIN_FRAC` | 0.10 | không thấy đường mà nước chiếm ít nhất bấy nhiêu thì coi là đường bị phủ kín |
-| `LEVEL_HOLD_SECONDS` | 6 | thời gian thấp liên tục trước khi được hạ mức (0 = tắt) |
+| `LEVEL_HOLD_SECONDS` | 0 | thời gian thấp liên tục trước khi được hạ mức (0 = tắt) |
 | `SCENE_CUT` | 0.6 | ngưỡng khác biệt màu để coi là chuyển cảnh (1 = tắt) |
 | `MASK_SMOOTH` | 0.6 | mức làm mượt mask (0 = tắt) |
 | `CAR_HISTORY` | 7 | số lần chạy gần nhất dùng để chốt level xe |

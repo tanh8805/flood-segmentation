@@ -27,7 +27,7 @@ SEGMENT_SECONDS = float(os.getenv("SEGMENT_SECONDS", "2"))  # độ dài mỗi �
 MIN_FRAME_FRAC = float(os.getenv("MIN_FRAME_FRAC", "0.5"))  # mức của đoạn = mức cao nhất mà >= 50% khung hình trong đoạn đạt
 ROAD_MIN_FRAC = float(os.getenv("ROAD_MIN_FRAC", "0.05"))              # đường chiếm >= 5% khung hình mới coi là thấy đường
 FLOOD_COVER_MIN_FRAC = float(os.getenv("FLOOD_COVER_MIN_FRAC", "0.10"))  # không thấy đường mà nước >= 10% khung hình -> đường bị phủ kín
-LEVEL_HOLD_SECONDS = float(os.getenv("LEVEL_HOLD_SECONDS", "6"))  # mức chỉ được giảm khi đã thấp hơn liên tục 6 giây (0 = tắt)
+LEVEL_HOLD_SECONDS = float(os.getenv("LEVEL_HOLD_SECONDS", "0"))  # > 0: mức chỉ được giảm khi đã thấp hơn liên tục bấy nhiêu giây; mặc định 0 để mức luôn khớp đúng thời điểm
 SCENE_CUT = float(os.getenv("SCENE_CUT", "0.6"))  # khác biệt màu so với ~1 giây trước vượt ngưỡng này -> chuyển cảnh (1 = tắt)
 MASK_SMOOTH = float(os.getenv("MASK_SMOOTH", "0.6"))  # trọng số lịch sử khi làm mượt mask flood/road giữa các lần chạy model (0 = tắt)
 CAR_HISTORY = int(os.getenv("CAR_HISTORY", "7"))       # level xe = level xuất hiện nhiều nhất trong 7 lần chạy model gần nhất
