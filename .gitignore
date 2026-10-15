@@ -1,0 +1,35 @@
+# môi trường và bộ nhớ đệm
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# kết quả chạy server, video, tệp tạm
+backend/outputs/
+outputs/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+tmp/
+*.log
+
+# dữ liệu và sản phẩm của pipeline (dataset cuối là riêng tư vì chứa FRED, CC BY-NC-SA)
+work/
+dataset/
+cache/
+data/
+external/
+raw/
+review/
+preview*/
+runs/
+kaggle_output/
+kaggle_upload/
+kaggle_kernel/
+*.cache
+*.zip
+.env
