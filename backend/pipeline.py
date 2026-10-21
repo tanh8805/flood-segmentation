@@ -40,6 +40,10 @@ WATER_MIN_RATIO = float(os.getenv("WATER_MIN_RATIO", "0.05"))  # độ phủ nư
 COVER_WIDE = float(os.getenv("COVER_WIDE", "0.30"))        # độ phủ >= 30%: chỉ đổi evidence ("nước phủ rộng"), mức vẫn tối đa 1
 GROUND_MIN_FRAC = float(os.getenv("GROUND_MIN_FRAC", "0.05"))  # mặt đất < 5% khung hình -> logic dự phòng
 FLOOD_COVER_MIN_FRAC = float(os.getenv("FLOOD_COVER_MIN_FRAC", "0.10"))  # dự phòng: nước >= 10% khung hình -> mặt đường bị phủ kín
+OBJ_CONF_2W = float(os.getenv("OBJ_CONF_2W", str(OBJ_CONF)))   # conf riêng cho xe máy / xe đạp (cảnh tối, nhìn từ trên xuống thường conf thấp)
+DARK_LUM = float(os.getenv("DARK_LUM", "0"))                   # độ sáng xám trung bình < ngưỡng: CLAHE trước khi detect/pose (0 = tắt)
+DARK_SCOPE = os.getenv("DARK_SCOPE", "det")                    # "det": chỉ detect/pose dùng khung đã tăng sáng; "all": cả mask nước và crop depth_cls
+DETECT_IMGSZ = int(os.getenv("DETECT_IMGSZ", "0"))             # imgsz riêng cho detect (0 = IMG_SIZE)
 PERSON_MIN_H = int(os.getenv("PERSON_MIN_H", "60"))
 VEHICLE_MIN_H = int(os.getenv("VEHICLE_MIN_H", "40"))
 CONTACT_MIN_FRAC = float(os.getenv("CONTACT_MIN_FRAC", "0.03"))  # nước chiếm >= 3% phần dưới box xe mới đưa vào depth_cls
@@ -152,6 +156,16 @@ def pick_depth(probs, up_p=DEPTH_UP_P):
     top = int(np.argmax(probs))
     up = [j for j in range(top + 1, len(probs)) if probs[j] >= up_p]
     return max(up) if up else top
+
+
+def brighten(frame, dark_lum=None):
+    """Khung tối (độ sáng xám trung bình thấp): CLAHE trên kênh L. Chỉ dùng cho detect/pose; trả về frame gốc nếu đủ sáng."""
+    dark_lum = DARK_LUM if dark_lum is None else dark_lum
+    if dark_lum <= 0 or cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).mean() >= dark_lum:
+        return frame
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    lab[..., 0] = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(lab[..., 0])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
 def object_text(obj):
@@ -356,10 +370,10 @@ class FloodPipeline:
             lab = torch.nn.functional.interpolate(logits.float(), size=(h, w), mode="bilinear", align_corners=False).argmax(1)[0]
             return torch.isin(lab, self._ground_ids).cpu().numpy()
 
-    def persons(self, frame, water):
+    def persons(self, frame, water, det_frame=None):
         if self.pose is None:
             return []
-        r = self.pose.predict(frame, conf=OBJ_CONF, imgsz=IMG_SIZE, verbose=False, device=self.device)[0]
+        r = self.pose.predict(frame if det_frame is None else det_frame, conf=OBJ_CONF, imgsz=IMG_SIZE, verbose=False, device=self.device)[0]
         if r.keypoints is None or not len(r.boxes):
             return []
         out = []
@@ -372,12 +386,14 @@ class FloodPipeline:
                 out.append({"kind": "person", "cls": "person", "box": box.astype(int), "conf": float(conf), "level": lv})
         return out
 
-    def vehicles(self, frame, water):
+    def vehicles(self, frame, water, det_frame=None):
         if self.detect is None:
             return [], []
-        r = self.detect.predict(frame, conf=OBJ_CONF, imgsz=IMG_SIZE, classes=list(COCO_VEHICLES), verbose=False, device=self.device)[0]
+        r = self.detect.predict(frame if det_frame is None else det_frame, conf=min(OBJ_CONF, OBJ_CONF_2W), imgsz=DETECT_IMGSZ or IMG_SIZE, classes=list(COCO_VEHICLES), verbose=False, device=self.device)[0]
         cand = []
         for box, conf, c in zip(r.boxes.xyxy.cpu().numpy(), r.boxes.conf.cpu().numpy(), r.boxes.cls.cpu().numpy().astype(int)):
+            if conf < (OBJ_CONF_2W if COCO_VEHICLES[c] in TWO_WHEELERS else OBJ_CONF):
+                continue
             cand.append({"kind": "vehicle", "cls": COCO_VEHICLES[c], "box": box.astype(int), "conf": float(conf), "level": 0})
         two = [v["box"] for v in cand if v["cls"] in TWO_WHEELERS]
         h, w = water.shape
@@ -404,9 +420,12 @@ class FloodPipeline:
 
     def infer(self, frame):
         """Khung hình -> (mask nước thô, danh sách vật tham chiếu). Không có nước: bỏ qua pose/detect/cls."""
+        det_frame = brighten(frame)
+        if DARK_SCOPE == "all":
+            frame = det_frame
         water = self.water_mask(frame)
         if water.mean() < WATER_MIN_FRAME_FRAC:
             return water, []
-        cars, two = self.vehicles(frame, water)
-        people = [p for p in self.persons(frame, water) if not any(center_inside(p["box"], t) for t in two)]
+        cars, two = self.vehicles(frame, water, det_frame)
+        people = [p for p in self.persons(frame, water, det_frame) if not any(center_inside(p["box"], t) for t in two)]
         return water, people + [c for c in cars if c["level"] > 0 or is_valid(c)]

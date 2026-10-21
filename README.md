@@ -74,6 +74,7 @@ Bật/tắt từng phần bằng biến môi trường `USE_POSE`, `USE_DETECT`,
 | `WATER_MODEL_PATH` / `POSE_MODEL_PATH` / `DETECT_MODEL_PATH` / `DEPTH_MODEL_PATH` | `weights/…` | đường dẫn model |
 | `GROUND_MODEL` | `nvidia/segformer-b2-finetuned-ade-512-512` | model mặt đất |
 | `WATER_CONF` / `OBJ_CONF` / `KP_CONF` / `KP_HIGH` | 0.4 / 0.35 / 0.5 / 0.7 | ngưỡng conf: nước / vật / keypoint / mắt cá "cao" |
+| `OBJ_CONF_2W` / `DARK_LUM` / `DARK_SCOPE` / `DETECT_IMGSZ` | = `OBJ_CONF` / 0 / `det` / 0 | tuỳ chọn thử cho cảnh tối (tắt mặc định): conf riêng xe máy/xe đạp; CLAHE khi độ sáng xám < ngưỡng (`det`: chỉ detect/pose, `all`: cả mask nước và crop depth_cls); imgsz detect |
 | `COVER_WIDE` | 0.30 | độ phủ nước/mặt đất từ mức này thì căn cứ ghi "Nước phủ rộng" (mức vẫn tối đa 1) |
 | `DEPTH_UP_P` | 0.35 | chọn bậc cao hơn của depth_cls nếu xác suất ≥ giá trị này |
 | `SHALLOW_F` / `KNEE_F` | 0.25 / 0.9 | tỉ lệ ống chân bị nước phủ: bậc 1 / bậc 3 |
@@ -106,23 +107,26 @@ Cải thiện so với v1 là rất nhỏ (+0.003); v2 đơn giản hơn (1 clas
 
 Trên crop xe máy/xe đạp/bus/tải tự gán (153): đúng bậc 0.529 → 0.575, đoán thấp 0.353 → 0.281. Trên STURM (366): đúng bậc 0.705 → 0.675.
 
-**Test video VN** (51 đoạn 2 giây trong 5 clip, nhãn tay theo contact sheet; `training/v2/vn_test_labels.csv`):
+**Test video VN** (51 đoạn 2 giây trong 5 clip; nhãn tay theo contact sheet, đã được người duyệt lại clip2 và clip5; `training/v2/vn_test_labels.csv`):
 
 | | đúng mức | lệch ≤ 1 | báo thiếu | báo dư |
 |---|---|---|---|---|
-| v1 | 0.412 | 0.980 | 0.020 | 0.569 |
-| v2 (độ phủ ≥ 30% → mức 2) | 0.333 | 0.980 | 0.098 | 0.569 |
-| **v2 (độ phủ tối đa mức 1)** | **0.490** | 0.961 | 0.373 | 0.137 |
+| v1 | 0.294 | 0.980 | 0.078 | 0.627 |
+| v2 (độ phủ ≥ 30% → mức 2) | 0.255 | 0.980 | 0.137 | 0.608 |
+| **v2 (độ phủ tối đa mức 1)** | **0.647** | 0.922 | 0.275 | 0.078 |
 
-Ma trận nhầm của v2 hiện tại (hàng = nhãn, cột = dự đoán): `[[3,2,0,0],[0,22,4,1],[0,18,0,0],[0,1,0,0]]`.
+Ma trận nhầm của v2 hiện tại (hàng = nhãn, cột = dự đoán): `[[3,0,0,0],[0,29,3,1],[0,11,1,0],[0,3,0,0]]`.
 
-Đúng mức tăng và báo dư giảm mạnh, nhưng **báo thiếu tăng từ 0.02 lên 0.37**: 18/18 đoạn nhãn 2 bị báo 1 (nước phủ rộng không vật tham chiếu, hoặc người/xe chỉ được nhận ở bậc 1). Đổi lấy ít báo dư thì mất độ an toàn; hệ thống không còn mức 2 nếu không có vật tham chiếu. Tập nhỏ (chỉ một đoạn nhãn 3).
+Đúng mức tăng và báo dư giảm mạnh, nhưng báo thiếu tăng (0.08 → 0.28): 11/12 đoạn nhãn 2 và cả 3 đoạn nhãn 3 bị báo 1. 10/14 đoạn báo thiếu nằm ở clip2 (gara ngập, tối, nhìn từ trên xuống): phần lớn đoạn không có vật tham chiếu nào trong khung, nên mức chỉ dựa vào độ phủ và tối đa là 1. Ở các đoạn có xe máy, model chỉ nhận với conf thấp (0.1–0.3 so với ngưỡng 0.35) và `depth_cls` cho "dưới nửa bánh" do ảnh quá tối.
+
+Đã thử (đo trên cả 5 clip): tăng sáng CLAHE khi khung tối (`DARK_LUM`, `DARK_SCOPE`), conf riêng cho xe máy/xe đạp 0.15–0.2 (`OBJ_CONF_2W`), detect imgsz 960 (`DETECT_IMGSZ`, +6 ms). Không cách nào sửa được clip2 (đúng mức 1/11 trước và sau); chỉ có imgsz 960 làm các clip khác thêm 1 đoạn đúng, quá ít để kết luận. Vì vậy các tuỳ chọn này **tắt mặc định**. Tập nhỏ (3 đoạn nhãn 3).
 
 **Tốc độ** (RTX 3050 Laptop 4 GB, khung 1 clip, không tính SegFormer mặt đất chạy ~1 lần/giây): GPU **29 ms/lần suy luận** (VRAM cấp phát tối đa ~200 MB, chưa tính SegFormer-b2 và CUDA context), CPU **221 ms/lần**. 5 lần/giây video thì CPU chậm hơn thời gian thực khoảng 1.1×.
 
 ## Hạn chế
 
 - Độ phủ một mình tối đa mức 1: cảnh nước phủ rộng không có người/xe được báo Chú ý dù có thể sâu hơn (báo thiếu 0.37 trên test VN).
+- Cảnh tối, trong nhà, nhìn từ trên xuống, xe chỉ lộ một phần: xe máy thường bị detect conf thấp hoặc không thấy (xem trên).
 - Mức 3 hiếm: cần người tới gối hoặc xe ngập hết bánh được nhận ra; xe ngập gần hết có thể không được detect.
 - Luật người phụ thuộc chất lượng mask nước và keypoint; mask nước kém (phản chiếu, tán cây) làm lệch mép nước.
 - `depth_cls` trên crop video VN chỉ đúng ~55%, thiên về đoán bậc 1 cho nhãn 2; nhãn tay theo contact sheet, không đo thực tế.

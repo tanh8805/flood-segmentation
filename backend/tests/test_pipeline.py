@@ -141,6 +141,16 @@ class DecisionTest(unittest.TestCase):
         self.assertEqual(self.decide(0.2, [obj("vehicle", 2, cls="motorcycle")])[1], "Xe máy ngập quá nửa bánh")
 
 
+class BrightenTest(unittest.TestCase):
+    def test_dark_frame_is_brightened_bright_frame_unchanged(self):
+        rng = np.random.default_rng(0)
+        dark = rng.integers(0, 30, (64, 64, 3), dtype=np.uint8)
+        self.assertGreater(P.brighten(dark, dark_lum=60).mean(), dark.mean())
+        light = rng.integers(120, 200, (64, 64, 3), dtype=np.uint8)
+        self.assertIs(P.brighten(light, dark_lum=60), light)
+        self.assertIs(P.brighten(dark, dark_lum=0), dark)   # tắt
+
+
 class TrackerTest(unittest.TestCase):
     def test_level_needs_two_consecutive_inferences(self):
         tr = P.ObjectTracker()
