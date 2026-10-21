@@ -33,6 +33,8 @@ IMG_SIZE = int(os.getenv("IMG_SIZE", "640"))
 WATER_CONF = float(os.getenv("WATER_CONF", "0.4"))
 OBJ_CONF = float(os.getenv("OBJ_CONF", "0.35"))
 KP_CONF = float(os.getenv("KP_CONF", "0.5"))                   # ngưỡng tin cậy của keypoint (mắt cá, gối, hông)
+KP_HIGH = float(os.getenv("KP_HIGH", "0.7"))                   # mắt cá conf >= KP_HIGH: chân còn nhìn rõ, nước chưa quá mắt cá
+DEPTH_UP_P = float(os.getenv("DEPTH_UP_P", "0.35"))            # depth_cls: xác suất bậc cao hơn >= ngưỡng này thì chọn bậc cao (thiên về an toàn)
 WATER_MIN_FRAME_FRAC = float(os.getenv("WATER_MIN_FRAME_FRAC", "0.005"))  # nước < 0.5% khung hình: coi như không có
 WATER_MIN_RATIO = float(os.getenv("WATER_MIN_RATIO", "0.05"))  # độ phủ nước/mặt đất tối thiểu để tính là "có nước"
 COVER_LEVEL2 = float(os.getenv("COVER_LEVEL2", "0.30"))        # độ phủ >= 30% -> bậc 2
@@ -114,15 +116,41 @@ def person_depth(kxy, kconf, box, water, kp_conf=KP_CONF):
     shin = ankle - knee
     if shin < 4:
         return None
+    ankle_c = max((kconf[i] for i in (15, 16)), default=0.0)
+    knee_c = max((kconf[i] for i in (13, 14)), default=0.0)
+    hip_c = max((kconf[i] for i in (11, 12)), default=0.0)
     # chỉ xét cột của chân (hông-gối-mắt cá) để nước phía sau người không bị tính là mép nước
     xs = [kxy[i][0] for i in range(11, 17) if kconf[i] >= kp_conf]
     bw = box[2] - box[0]
     xr = (max(box[0], min(xs) - 0.15 * bw), min(box[2], max(xs) + 0.15 * bw)) if xs else (box[0] + 0.25 * bw, box[2] - 0.25 * bw)
     edge = water_edge_y(water, box, xr, min_y=(hip if hip is not None else knee) - 0.05 * shin)
     if edge is None:
-        return 0
-    f = (ankle - edge) / shin
-    return 1 if f < SHALLOW_F else 2 if f < KNEE_F else 3
+        lv = 0
+    else:
+        f = (ankle - edge) / shin
+        lv = 1 if f < SHALLOW_F else 2 if f < KNEE_F else 3
+    return combine_person_signals(lv, ankle_c, knee_c, hip_c, kp_conf)
+
+
+def combine_person_signals(edge_lv, ankle_c, knee_c, hip_c, kp_conf=KP_CONF):
+    """Kết hợp bậc theo mép nước với tín hiệu conf keypoint; mâu thuẫn thì lấy bậc thấp hơn, trừ khi cả hai cùng chỉ bậc 3.
+    mắt cá conf cao -> <= 1 | mắt cá thấp + gối cao -> 1 (mép nước <= 1) hoặc 2 | mắt cá + gối thấp + hông cao -> 3."""
+    if ankle_c >= KP_HIGH:
+        kp = 1
+    elif ankle_c < kp_conf and knee_c >= kp_conf:
+        kp = 1 if edge_lv <= 1 else 2
+    elif ankle_c < kp_conf and knee_c < kp_conf and hip_c >= kp_conf:
+        kp = 3
+    else:
+        return edge_lv
+    return edge_lv if edge_lv == kp else min(edge_lv, kp)
+
+
+def pick_depth(probs, up_p=DEPTH_UP_P):
+    """probs: xác suất theo bậc 0..3. Lấy bậc top-1, nhưng nếu có bậc cao hơn với xác suất >= up_p thì chọn bậc cao nhất trong số đó."""
+    top = int(np.argmax(probs))
+    up = [j for j in range(top + 1, len(probs)) if probs[j] >= up_p]
+    return max(up) if up else top
 
 
 def object_text(obj):
@@ -366,7 +394,9 @@ class FloodPipeline:
                 px, py = 0.2 * (x2 - x1) / 2, 0.2 * (y2 - y1) / 2   # nới box 20%
                 crops.append(frame[max(0, int(y1 - py)):min(h, int(y2 + py)), max(0, int(x1 - px)):min(w, int(x2 + px))])
             for v, res in zip(todo, self.depth.predict(crops, verbose=False, device=self.device)):
-                v["level"] = int(str(res.names[res.probs.top1])[-1])
+                p = res.probs.data.cpu().numpy()
+                order = sorted(range(len(p)), key=lambda i: int(str(res.names[i])[-1]))  # xác suất theo thứ tự bậc 0..3
+                v["level"] = pick_depth(p[order])
         return cand, two
 
     def infer(self, frame):

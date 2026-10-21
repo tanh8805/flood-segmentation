@@ -1,0 +1,50 @@
+{
+ "all": {
+  "before": {
+   "n": 519,
+   "exact": 0.653,
+   "within1": 0.948,
+   "under": 0.202,
+   "over": 0.145
+  },
+  "after": {
+   "n": 519,
+   "exact": 0.645,
+   "within1": 0.956,
+   "under": 0.17,
+   "over": 0.185
+  }
+ },
+ "sturm": {
+  "before": {
+   "n": 366,
+   "exact": 0.705,
+   "within1": 0.937,
+   "under": 0.139,
+   "over": 0.156
+  },
+  "after": {
+   "n": 366,
+   "exact": 0.675,
+   "within1": 0.945,
+   "under": 0.123,
+   "over": 0.202
+  }
+ },
+ "own": {
+  "before": {
+   "n": 153,
+   "exact": 0.529,
+   "within1": 0.974,
+   "under": 0.353,
+   "over": 0.118
+  },
+  "after": {
+   "n": 153,
+   "exact": 0.575,
+   "within1": 0.98,
+   "under": 0.281,
+   "over": 0.144
+  }
+ }
+}

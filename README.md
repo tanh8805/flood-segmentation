@@ -1,118 +1,116 @@
 # Cảnh báo ngập từ video camera đường phố
 
-Ứng dụng web nhận một video camera đường phố, tô vùng nước, mặt đường và xe trên video, rồi cho biết **mức cảnh báo ngập theo từng giai đoạn** (An toàn, Chú ý, Cảnh báo, Nguy hiểm). Chỉ chạy một model YOLO11n-seg; các model lớn chỉ dùng offline để gán nhãn dữ liệu huấn luyện.
+Ứng dụng web nhận một video camera đường phố, tô vùng nước và các vật tham chiếu (người, xe), rồi cho biết **mức cảnh báo ngập theo từng giai đoạn** (0 An toàn, 1 Chú ý, 2 Cảnh báo, 3 Nguy hiểm) kèm **căn cứ** bằng tiếng Việt cho từng đoạn ("Người lội nước tới gối", "Xe máy ngập quá nửa bánh", "Không có vật tham chiếu, chỉ dựa vào độ phủ").
 
-Quy trình sử dụng: tải video lên → phân tích → xem kết quả (video đã tô mask, thước đo mực nước, biểu đồ diễn biến, bảng các giai đoạn).
+Quy trình: tải video lên → phân tích → xem kết quả (video đã tô mask, thước đo mực nước, biểu đồ diễn biến, bảng các giai đoạn và căn cứ).
+
+## Cơ chế
+
+Độ phủ nước không cho biết độ sâu, nên mức cao chỉ được báo khi có **vật tham chiếu** có kích thước đã biết chạm nước.
+
+| Thành phần | Model | Nguồn |
+|---|---|---|
+| Vùng nước | `water.pt`, YOLO11s-seg 1 class | tự train (`training/v2`) |
+| Người, mắt cá/gối/hông | `yolo11n-pose.pt` | COCO có sẵn |
+| Xe đạp, xe máy, ô tô, xe buýt, xe tải | `yolo11n.pt` | COCO có sẵn |
+| Bậc ngập của xe | `depth_cls.pt`, YOLO11n-cls 4 lớp | tự train |
+| Mặt đất (mẫu số độ phủ) | SegFormer-b2 ADE20K (road, sidewalk, path, earth, floor) ∪ vùng nước | có sẵn, tải từ Hugging Face |
+
+Bậc độ sâu 0–3: 0 không chạm nước · 1 mắt cá / dưới nửa bánh (~10–20 cm) · 2 giữa ống chân / quá nửa bánh xe máy (~20–45 cm) · 3 tới gối trở lên / ngập hết bánh (≥ 50 cm).
+
+**Người** (luật hình học, `person_depth`): mép nước = hàng trên cùng của vùng nước nối liền đáy box, trong cột của chân; so với y mắt cá, gối, hông (cần gối hoặc hông đủ tin cậy để neo). Kết hợp thêm conf keypoint: mắt cá conf cao (≥ 0.7) → bậc ≤ 1; mắt cá thấp + gối cao → bậc 1 hoặc 2 tuỳ mép nước; mắt cá và gối cùng thấp + hông cao → tín hiệu bậc 3. Hai tín hiệu mâu thuẫn thì lấy bậc **thấp hơn**, trừ khi cả hai cùng chỉ bậc 3. Người nằm trong box xe hai bánh bị bỏ.
+
+**Xe**: chỉ xe có ≥ 3% phần dưới box chạm nước mới chạy `depth_cls` (crop nới box 20%); xe không chạm nước là bậc 0. Chọn bậc cao hơn top-1 nếu xác suất của nó ≥ 0.35 (`DEPTH_UP_P`, thiên về an toàn).
+
+**Mức của khung hình**: 0 không có nước đáng kể · 1 có nước hoặc vật bậc 1 · 2 vật bậc 2 hoặc độ phủ nước/mặt đất ≥ 30% · 3 **chỉ** khi có vật bậc 3. Vật hợp lệ: người cao ≥ 60 px, xe cao ≥ 40 px, giữ bậc ≥ 2 lần suy luận liên tiếp. Khung không có nước thì bỏ qua pose/detect/cls. Mặt đất < 5% khung → logic dự phòng (nước ≥ 10% khung coi là phủ kín).
+
+**Theo thời gian**: 5 lần suy luận/giây, mask nước làm mượt có ngưỡng trễ, đoạn 2 giây (mức đoạn = mức cao nhất mà ≥ 50% khung hình đạt), phát hiện chuyển cảnh bằng histogram màu, mặt đất chạy ~1 lần/giây hoặc khi chuyển cảnh. Các đoạn liền nhau cùng mức gộp thành giai đoạn; mức cả video là mức cao nhất.
 
 ## Cấu trúc
 
 ```
-backend/            ứng dụng FastAPI + phân tích video
-  app.py            API: /analyze, /jobs/{id}, /jobs/{id}/video, /health
-  analyzer.py       suy luận, làm mượt theo thời gian, tính mức cảnh báo, vẽ video kết quả
-  static/index.html giao diện
-  tests/            unit test cho class_map, luật mức cảnh báo
-  weights/best.pt   model YOLO11n-seg đã huấn luyện
-training/           tái lập dataset và huấn luyện (xem training/README.md)
+backend/
+  app.py              API FastAPI: /analyze, /jobs/{id}, /jobs/{id}/video, /health
+  pipeline.py         FloodPipeline (nạp model một lần) và các luật thuần: người, xe, cảnh báo, tracker, mặt đất
+  analyzer.py         đọc video, chia đoạn, làm mượt, vẽ video kết quả
+  download_weights.py tải weights công khai
+  static/index.html   giao diện
+  tests/              unit test luật người, luật cảnh báo, mặt đất, bật/tắt
+  weights/            water.pt, depth_cls.pt (tự train, ~20 MB) + yolo11n-pose.pt, yolo11n.pt
+training/             tái lập dataset và huấn luyện (training/v2: model nước, depth_cls, đánh giá)
 ```
 
 ## Chạy ứng dụng
 
-Yêu cầu Python 3.10+; có GPU thì ultralytics tự dùng, không thì chạy CPU (khoảng 1–2 lần thời lượng video).
+Python 3.10+; có GPU thì tự dùng, không thì chạy CPU.
 
 ```bash
 cd backend
 pip install -r requirements.txt
+python download_weights.py        # yolo11n(-pose), SegFormer; kiểm tra water.pt, depth_cls.pt
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-- **Trình duyệt**: mở http://localhost:8000, kéo thả hoặc chọn video, bấm **Phân tích**. Giao diện hiện tiến trình tải lên và phân tích, kết luận ở đầu trang, video kết quả cạnh thước đo mực nước, biểu đồ diễn biến theo thời gian (bấm để tua, phím ← → tua 2 giây) và bảng các giai đoạn.
-- **Dòng lệnh, không cần server**: `python analyzer.py video.mp4 [ket_qua.mp4]` in kết quả JSON và tạo video đã tô mask.
-- **API** (xem thêm http://localhost:8000/docs):
-  ```bash
-  curl -F "file=@video.mp4" http://localhost:8000/analyze     # -> {"job_id": "...", "status_url": "..."}
-  curl http://localhost:8000/jobs/<job_id>                    # status: queued/running/done/error, progress, result
-  curl -o ket_qua.mp4 http://localhost:8000/jobs/<job_id>/video
-  ```
-  Số liệu từng khung hình nằm ở `backend/outputs/<job_id>/result.json`.
-- **Test**: `cd backend && python -m unittest tests.test_analyzer`.
+- **Trình duyệt**: http://localhost:8000, chọn video, bấm **Phân tích**.
+- **Dòng lệnh**: `python analyzer.py video.mp4 [ket_qua.mp4]` in kết quả JSON và tạo video đã tô mask.
+- **API** (http://localhost:8000/docs): `curl -F "file=@video.mp4" http://localhost:8000/analyze` → `job_id`; `GET /jobs/<id>` (status, progress, result, mỗi đoạn có `evidence`); `GET /jobs/<id>/video`.
+- **Test**: `cd backend && python -m unittest discover tests`.
 
-Job lưu trong bộ nhớ (tắt server là mất danh sách), video được xử lý lần lượt từng cái (`max_workers=1`; biến `DEPTH_MODEL` trong `analyzer.py` là biến toàn cục nên chỉ an toàn khi xử lý một video một lúc).
-
-## Class của model
-
-| id | class | ý nghĩa |
-|---|---|---|
-| 0 | `flood` | vùng nước trên mặt đường |
-| 1 | `road` | mặt đường |
-| 2 | `car_dry` | xe không ngập |
-| 3 | `car_shallow` | xe ngập nông (mức 1–2 của STURM: nước tới bánh xe, gầm xe) |
-| 4 | `car_deep` | xe ngập sâu (mức 3–4 của STURM: nước tới cửa kính, mái xe) |
-
-Ứng dụng đọc tên class từ `model.names` nên không phụ thuộc thứ tự id. Model cũ với `car_L0…car_L4` vẫn được đọc.
-
-## Cách tính mức cảnh báo
-
-**Độ phủ không phải độ sâu.** Nước phủ kín mặt đường vẫn có thể chỉ nông, nên độ phủ chỉ đẩy tối đa tới mức Cảnh báo; chỉ xe ngập sâu mới lên mức Nguy hiểm.
-
-1. Chạy model 5 lần mỗi giây video (`INFER_FPS`) với `CONF=0.5`, rồi làm mượt theo thời gian:
-   - **flood/road**: trung bình trượt mask qua các lần chạy, có ngưỡng trễ (bật khi > 0.5, chỉ tắt khi < 0.25) để vùng không nhấp nháy;
-   - **xe**: nối xe giữa các lần chạy theo IoU box; level là level xuất hiện nhiều nhất trong 7 lần gần nhất (hòa thì lấy level cao hơn);
-   - khung hình nằm giữa hai lần chạy: mask flood/road chuyển dần từ lần trước sang lần sau.
-2. Với mỗi khung hình:
-   - `flood_ratio` = diện tích flood / (flood + road). Khi thấy rất ít đường (< 5% khung hình): nếu nước chiếm ≥ 10% khung hình thì coi như đường bị nước phủ kín (vẫn chia cho flood + road, ra gần 100%); nếu nước ít hơn thì chỉ là vũng nước, chia cho cả khung hình để vũng nhỏ không thành 100%.
-   - Mức xe: `car_dry` = 0, `car_shallow` = 2, `car_deep` = 3.
-   - Khung hình đạt mức nếu thỏa **một trong hai** điều kiện:
-
-   | Mức | Tên | nước phủ ≥ | hoặc xe |
-   |---|---|---|---|
-   | 0 | An toàn | – | – |
-   | 1 | Chú ý | 5% | level ≥ 1 (chỉ model cũ `car_L1`) |
-   | 2 | Cảnh báo | 30% | `car_shallow` |
-   | 3 | Nguy hiểm | không dùng độ phủ | `car_deep` |
-
-3. Chia video thành đoạn 2 giây (`SEGMENT_SECONDS`). Mức của đoạn là mức cao nhất mà ít nhất 50% khung hình trong đoạn đạt được, nên vài khung hình nhận nhầm không làm mức nhảy lung tung.
-4. **Giữ mức** (`LEVEL_HOLD_SECONDS`, mặc định 0 = tắt): mặc định mức luôn là mức thật của đoạn đang phát, đoạn không có nước là An toàn. Đặt > 0 (ví dụ 6) thì mức tăng đổi ngay, còn muốn giảm phải thấp hơn liên tục bấy nhiêu giây (lấp những đoạn model sót nước vì bị che). Chỉ giữ mức trong cùng một cảnh; chuyển cảnh được phát hiện bằng histogram màu (`SCENE_CUT`) và thời điểm nằm trong `scene_cuts`.
-5. Các đoạn liền nhau cùng mức được gộp thành **giai đoạn**; mức cả video là mức cao nhất.
-6. Đoạn không có xe nào: thanh cảnh báo và JSON (`note` ở đoạn, giai đoạn và kết quả chung) ghi "không có xe để ước lượng độ sâu", nghĩa là mức chỉ dựa vào độ phủ.
-
-Ngưỡng nằm trong `LEVELS` của `analyzer.py`. Các tham số khác chỉnh bằng biến môi trường:
+Bật/tắt từng phần bằng biến môi trường `USE_POSE`, `USE_DETECT`, `USE_DEPTH_CLS`, `USE_GROUND` (`0` để tắt); thiếu weights của phần nào thì chạy với phần còn lại. Thiếu `water.pt` thì không chạy được.
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `MODEL_PATH` | `weights/best.pt` | đường dẫn model |
-| `CONF` | 0.5 | confidence tối thiểu |
-| `INFER_FPS` | 5 | số lần chạy model mỗi giây video |
-| `ROAD_MIN_FRAC` | 0.05 | đường chiếm ít nhất bao nhiêu khung hình mới coi là thấy đường |
-| `FLOOD_COVER_MIN_FRAC` | 0.10 | không thấy đường mà nước chiếm ít nhất bấy nhiêu thì coi là đường bị phủ kín |
-| `LEVEL_HOLD_SECONDS` | 0 | thời gian thấp liên tục trước khi được hạ mức (0 = tắt) |
-| `SCENE_CUT` | 0.6 | ngưỡng khác biệt màu để coi là chuyển cảnh (1 = tắt) |
-| `MASK_SMOOTH` | 0.6 | mức làm mượt mask (0 = tắt) |
-| `CAR_HISTORY` | 7 | số lần chạy gần nhất dùng để chốt level xe |
-| `SEGMENT_SECONDS` / `MIN_FRAME_FRAC` | 2 / 0.5 | độ dài đoạn / tỉ lệ khung hình tối thiểu để đoạn đạt mức |
-| `OUT_WIDTH` / `MAX_SECONDS` | 960 / 600 | chiều rộng video kết quả / chỉ xử lý tối đa 10 phút đầu |
-| `MAX_UPLOAD_MB` | 500 | dung lượng upload tối đa |
-| `FONT_PATH` | tự tìm | font vẽ chữ tiếng Việt lên video |
+| `WATER_MODEL_PATH` / `POSE_MODEL_PATH` / `DETECT_MODEL_PATH` / `DEPTH_MODEL_PATH` | `weights/…` | đường dẫn model |
+| `GROUND_MODEL` | `nvidia/segformer-b2-finetuned-ade-512-512` | model mặt đất |
+| `WATER_CONF` / `OBJ_CONF` / `KP_CONF` / `KP_HIGH` | 0.4 / 0.35 / 0.5 / 0.7 | ngưỡng conf: nước / vật / keypoint / mắt cá "cao" |
+| `COVER_LEVEL2` | 0.30 | độ phủ nước/mặt đất để đạt bậc 2 |
+| `DEPTH_UP_P` | 0.35 | chọn bậc cao hơn của depth_cls nếu xác suất ≥ giá trị này |
+| `SHALLOW_F` / `KNEE_F` | 0.25 / 0.9 | tỉ lệ ống chân bị nước phủ: bậc 1 / bậc 3 |
+| `INFER_FPS` / `SEGMENT_SECONDS` / `MIN_FRAME_FRAC` | 5 / 2 / 0.5 | tốc độ suy luận, độ dài đoạn, tỉ lệ khung đạt mức |
+| `LEVEL_HOLD_SECONDS` | 0 | > 0: mức chỉ giảm khi đã thấp liên tục bấy nhiêu giây |
+| `OUT_WIDTH` / `MAX_SECONDS` / `MAX_UPLOAD_MB` | 960 / 600 / 500 | video kết quả, thời lượng tối đa, upload tối đa |
+
+Job lưu trong bộ nhớ, video xử lý lần lượt từng cái.
 
 ## Kết quả
 
-Model YOLO11n-seg huấn luyện trên Kaggle (146 epoch, tốt nhất ở epoch 106) với dataset 2877 ảnh gán nhãn bán tự động (xem `training/README.md`). Đánh giá trên tập test giữ riêng, so với model trước đó:
+**Model nước** (YOLO11s-seg, 100 epoch, chỉ mask người gán; train/val 1308/228 ảnh gồm ảnh âm). IoU trên test_flood (160 ảnh, cùng tập với các lần trước):
 
-| Chỉ số | Model trước | Model này |
+| Model | IoU | Deepflood (120) | pixabay (40) |
+|---|---|---|---|
+| model đầu tiên | 0.691 | 0.732 | 0.567 |
+| model 5 class (v1) | 0.817 | 0.859 | 0.691 |
+| **model nước v2** | **0.820** | 0.860 | 0.699 |
+
+Cải thiện so với v1 là rất nhỏ (+0.003); v2 đơn giản hơn (1 class, không phụ thuộc nhãn giáo viên) nhưng không chính xác hơn rõ rệt.
+
+**depth_cls** (519 crop test, nhãn xe tay + STURM; ngưỡng chọn bậc cao `DEPTH_UP_P = 0.35`):
+
+| | top-1 | có ngưỡng 0.35 |
 |---|---|---|
-| Flood IoU trên test_flood (160 ảnh, mask người) | 0.691 | **0.817** |
-| ↳ Deepflood (120) / pixabay (40) | 0.732 / 0.567 | **0.859 / 0.691** |
-| Độ chính xác mức xe trên test_car (253 xe) | model trước không có class xe | **84.6%** |
+| đúng bậc | 0.653 | 0.645 |
+| sai ≤ 1 bậc | 0.948 | 0.956 |
+| đoán thấp hơn nhãn | 0.202 | 0.170 |
+| đoán cao hơn nhãn | 0.145 | 0.185 |
 
-Mask mAP50 từng class trên tập val (406 ảnh): flood 0.693 · road 0.612 · car_dry 0.567 · car_shallow 0.794 · car_deep 0.715 (tổng 0.676). Confusion matrix mức xe và các bảng chi tiết nằm trong `training/README.md`.
+Trên crop xe máy/xe đạp/bus/tải tự gán (153): đúng bậc 0.529 → 0.575, đoán thấp 0.353 → 0.281. Trên STURM (366): đúng bậc 0.705 → 0.675.
 
-Thử trên video thật: người thông cống trên đường ngập (không có xe) cho **Cảnh báo** chứ không phải Nguy hiểm; vũng nước nhỏ trên đường cho **Chú ý**; nước tràn dần cho Chú ý rồi Cảnh báo; đường khô cho **An toàn**.
+**Test video VN** (51 đoạn 2 giây trong 5 clip, nhãn tay theo contact sheet; xem `training/v2/vn_test_labels.csv`). Hàng = nhãn, cột = dự đoán:
+
+| | đúng mức | sai ≤ 1 | ma trận nhầm |
+|---|---|---|---|
+| hệ thống cũ (v1) | 0.412 | 0.98 | `[[3,1,1,0],[0,0,27,0],[0,0,18,0],[0,0,1,0]]` |
+| **v2** | **0.333** | 0.98 | `[[3,2,0,0],[0,0,26,1],[0,4,14,0],[0,0,1,0]]` |
+
+v2 **không tốt hơn** v1 trên tập này về số đoạn đúng. Lỗi chính của cả hai: gần như mọi đoạn nhãn 1 bị báo 2 vì độ phủ nước/mặt đất thường 60–100% (đường ngập kín) → luật độ phủ ≥ 30% đẩy lên bậc 2. Thử tắt luật độ phủ cho đúng mức 0.49 nhưng toàn bộ 18 đoạn nhãn 2 bị báo 1 (đoán thấp), nên giữ luật. Độ phủ không phân biệt được bậc 1 và 2 trong tập này. Cỡ mẫu nhỏ (một mức nhãn 3 duy nhất), không nên suy ra nhiều hơn.
+
+**Tốc độ** (RTX 3050 Laptop 4 GB, khung 1 clip, không tính SegFormer mặt đất chạy ~1 lần/giây): GPU **29 ms/lần suy luận** (VRAM cấp phát tối đa ~200 MB, chưa tính SegFormer-b2 và CUDA context), CPU **221 ms/lần**. 5 lần/giây video thì CPU chậm hơn thời gian thực khoảng 1.1×.
 
 ## Hạn chế
 
-- Class `road` yếu khi đường đã ngập (AP50 trên val 0.612 nhưng gần 0 trên các ảnh ngập của test_flood): khi không thấy đường, độ phủ gần 100% và chỉ bị chặn ở mức Cảnh báo.
-- `car_dry` yếu nhất trong các class xe; xe ngập gần hết (chỉ còn mái) hoặc xe bị nước bắn tung có thể không được nhận ra, nên mức Nguy hiểm khó kích hoạt trong các cảnh ngập sâu nhất.
-- Thỉnh thoảng có mảng flood nhầm trên tán cây hoặc bóng nước phản chiếu.
-- Mức xe trong dữ liệu Deepflood/Sazara là dự đoán của model đã có, không phải nhãn người; nhãn road của tập test_flood cũng là nhãn tự động.
-- Chưa được thử với cảnh ban đêm, camera chuyển động nhanh hoặc ngập trong nhà (ví dụ video garage ngập cho mức Cảnh báo vì nước phủ kín khung hình).
-- Dataset cuối chứa dữ liệu FRED (CC BY-NC-SA 4.0) nên **không công khai**; kiểm tra giấy phép các nguồn trước khi dùng model vào mục đích thương mại (xem `training/README.md`).
+- Độ phủ không phân biệt bậc 1 và 2; khi không có vật tham chiếu hợp lệ, mức chỉ dựa vào độ phủ và dễ báo quá (xem bảng nhầm ở trên).
+- Mức 3 hiếm: cần người tới gối hoặc xe ngập hết bánh được nhận ra; xe ngập gần hết có thể không được detect.
+- Luật người phụ thuộc chất lượng mask nước và keypoint; mask nước kém (phản chiếu, tán cây) làm lệch mép nước.
+- `depth_cls` trên crop video VN chỉ đúng ~55%, thiên về đoán bậc 1 cho nhãn 2; nhãn tay theo contact sheet, không đo thực tế.
+- Test VN nhỏ (51 đoạn, 5 clip, đa số bậc 1–2); chưa thử ban đêm, camera chuyển động nhanh, ngập trong nhà.
+- Dữ liệu train nước gồm FRED (CC BY-NC-SA 4.0): dataset không công khai; kiểm tra giấy phép các nguồn trước khi dùng thương mại (xem `training/README.md`).

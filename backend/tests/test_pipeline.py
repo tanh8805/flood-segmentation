@@ -13,12 +13,12 @@ import pipeline as P
 H = W = 200
 
 
-def person_kp(ankle=180, knee=140, hip=100, x=100, conf=0.9):
+def person_kp(ankle=180, knee=140, hip=100, x=100, conf=0.9, ankle_conf=None):
     kxy = np.zeros((17, 2), np.float32)
     kc = np.zeros(17, np.float32)
     for ids, y in (((11, 12), hip), ((13, 14), knee), ((15, 16), ankle)):
         for i in ids:
-            kxy[i], kc[i] = (x, y), conf
+            kxy[i], kc[i] = (x, y), (conf if ids != (15, 16) or ankle_conf is None else ankle_conf)
     return kxy, kc
 
 
@@ -37,10 +37,26 @@ class PersonRuleTest(unittest.TestCase):
         return P.person_depth(kxy, kc, BOX, water_from(top))
 
     def test_levels_by_water_edge(self):
-        self.assertEqual(self.depth(175), 1)   # ngang mắt cá
-        self.assertEqual(self.depth(160), 2)   # giữa ống chân
-        self.assertEqual(self.depth(140), 3)   # tới gối
-        self.assertEqual(self.depth(110), 3)   # quá gối
+        # mắt cá bị nước che (conf thấp) thì luật mép nước quyết định
+        self.assertEqual(self.depth(175, ankle_conf=0.3, hip=100, knee=140), 1)   # ngang mắt cá
+        self.assertEqual(self.depth(160, ankle_conf=0.3), 2)   # giữa ống chân
+        self.assertEqual(self.depth(110, ankle_conf=0.3, conf=0.9), 2)            # gối nhìn rõ: không báo 3
+        kxy, kc = person_kp(ankle_conf=0.3)
+        kc[13:15] = 0.2   # gối cũng chìm, hông rõ: cả hai tín hiệu cùng chỉ bậc 3
+        self.assertEqual(P.person_depth(kxy, kc, BOX, water_from(140)), 3)
+
+    def test_ankle_visible_caps_at_one(self):
+        self.assertEqual(self.depth(140), 1)   # mắt cá conf cao nhưng mép nước cao: lấy bậc thấp
+        self.assertEqual(self.depth(175), 1)
+
+    def test_ankle_hidden_knee_visible_is_one_or_two(self):
+        self.assertEqual(self.depth(175, ankle_conf=0.2), 1)
+        self.assertEqual(self.depth(160, ankle_conf=0.2), 2)
+
+    def test_pick_depth_prefers_higher_level(self):
+        self.assertEqual(P.pick_depth([0.1, 0.5, 0.36, 0.04]), 2)
+        self.assertEqual(P.pick_depth([0.1, 0.55, 0.3, 0.05]), 1)
+        self.assertEqual(P.pick_depth([0.1, 0.4, 0.2, 0.35]), 3)
 
     def test_no_water_at_feet_is_zero(self):
         kxy, kc = person_kp()
