@@ -1,8 +1,7 @@
-"""Phân tích video camera đường phố -> video segmentation + mức cảnh báo ngập theo từng giai đoạn.
+"""Phân tích video camera đường phố -> video segmentation + NGẬP / KHÔNG NGẬP theo thời gian.
 
-Cơ chế (xem pipeline.py): model nước tự train, người (yolo11n-pose) và xe (yolo11n) làm vật tham chiếu độ sâu,
-SegFormer ADE20K cho mặt đất. Mức 0..3 theo luật: 0 không có nước; 1 có nước hoặc vật bậc 1;
-2 chỉ khi có vật bậc 2; 3 chỉ khi có vật bậc 3 (độ phủ một mình tối đa mức 1).
+Cơ chế (xem pipeline.py): model nước tự train + SegFormer ADE20K cho mặt đất. Mỗi lần suy luận cho độ phủ nước/mặt đường;
+luật nhị phân (ngưỡng trễ + giữ H giây) đổi độ phủ thành trạng thái NGẬP; mỗi đoạn 2 giây NGẬP khi >= 50% lần suy luận ngập.
 Chạy thử không cần server:  python analyzer.py video.mp4 [video_ket_qua.mp4]
 """
 import os
@@ -10,7 +9,7 @@ import sys
 import json
 import threading
 import unicodedata
-from collections import Counter, deque
+from collections import deque
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,27 +20,16 @@ from PIL import Image, ImageDraw, ImageFont
 
 import pipeline as P
 INFER_FPS = float(os.getenv("INFER_FPS", "5"))        # số lần chạy model mỗi giây video; khung hình ở giữa dùng lại mask gần nhất
-SEGMENT_SECONDS = float(os.getenv("SEGMENT_SECONDS", "2"))  # độ dài mỗi đoạn để tính mức cảnh báo
-MIN_FRAME_FRAC = float(os.getenv("MIN_FRAME_FRAC", "0.5"))  # mức của đoạn = mức cao nhất mà >= 50% khung hình trong đoạn đạt
+SEGMENT_SECONDS = float(os.getenv("SEGMENT_SECONDS", "2"))  # độ dài mỗi đoạn
 GROUND_EVERY_SECONDS = float(os.getenv("GROUND_EVERY_SECONDS", "1"))  # mặt đất (SegFormer) chạy ~1 lần/giây hoặc khi chuyển cảnh
-LEVEL_HOLD_SECONDS = float(os.getenv("LEVEL_HOLD_SECONDS", "0"))  # > 0: mức chỉ được giảm khi đã thấp hơn liên tục bấy nhiêu giây; mặc định 0 để mức theo đúng thời điểm
 SCENE_CUT = float(os.getenv("SCENE_CUT", "0.6"))  # khác biệt màu so với ~1 giây trước vượt ngưỡng này -> chuyển cảnh (1 = tắt)
 MASK_SMOOTH = float(os.getenv("MASK_SMOOTH", "0.6"))  # trọng số lịch sử khi làm mượt mask nước giữa các lần chạy model (0 = tắt)
 OUT_WIDTH = int(os.getenv("OUT_WIDTH", "960"))        # chiều rộng video kết quả (thu nhỏ cho nhẹ)
 MAX_SECONDS = float(os.getenv("MAX_SECONDS", "600"))  # chỉ xử lý tối đa 10 phút đầu
 
-# Mức cảnh báo: (mã, tên, màu BGR). Luật chọn mức nằm ở pipeline.frame_decision.
-LEVELS = [
-    (0, "An toàn", (70, 160, 40)),
-    (1, "Chú ý", (0, 185, 235)),
-    (2, "Cảnh báo", (0, 120, 245)),
-    (3, "Nguy hiểm", (40, 30, 210)),
-]
-NO_REF_NOTE = "không có vật tham chiếu để ước lượng độ sâu"
-# Màu vẽ (BGR)
-CLASS_COLORS = {"water": (230, 120, 20), "person": (80, 200, 80), "vehicle": (0, 215, 255)}
-LEVEL_COLORS = {0: (80, 200, 80), 1: (60, 220, 200), 2: (0, 150, 255), 3: (40, 40, 230)}
-UNREAD_COLOR = (150, 150, 150)   # vật quá nhỏ/xa hoặc đọc mâu thuẫn: vẽ box, không đọc độ sâu
+FLOOD_BGR = (40, 30, 210)    # nền banner NGẬP (đỏ)
+SAFE_BGR = (70, 160, 40)     # nền banner KHÔNG NGẬP (xanh)
+WATER_BGR = (230, 120, 20)
 
 _pipe = None
 _lock = threading.Lock()
@@ -52,25 +40,6 @@ def get_pipeline():
     if _pipe is None:
         _pipe = P.FloodPipeline()
     return _pipe
-
-
-
-def segment_level(stats):
-    n = len(stats)
-    return max(code for code, *_ in LEVELS if code == 0 or sum(s["level"] >= code for s in stats) / n >= MIN_FRAME_FRAC)
-
-
-def held_level(raw, start_s, scene, prev_segments):
-    """Nước không rút trong vài giây: mức tăng ngay, nhưng chỉ giảm khi các đoạn trong
-    LEVEL_HOLD_SECONDS giây trước đều thấp hơn. Lấp các đoạn model sót nước (bị che, nhận nhầm).
-    Chỉ giữ trong cùng một cảnh: sang cảnh khác (logo, trường quay...) thì không kéo mức cũ sang."""
-    recent = [p["raw_level"] for p in prev_segments
-              if p["scene"] == scene and p["end_s"] > start_s - LEVEL_HOLD_SECONDS]
-    return max([raw] + recent)
-
-def max_or_none(values):
-    values = [v for v in values if v is not None]
-    return max(values) if values else None
 
 
 class SceneCutDetector:
@@ -135,51 +104,29 @@ def vn_text(s):
 
 
 @lru_cache(maxsize=512)
-def banner(width, level, line2):
-    """Thanh cảnh báo phía trên video (PIL để hiển thị được tiếng Việt)."""
+def banner(width, flooded, ratio_pct, line2):
+    """Thanh trạng thái phía trên video (PIL để hiển thị được tiếng Việt)."""
     scale = width / 960
     height = int(70 * scale)
-    b, g, r = LEVELS[level][2]
+    b, g, r = FLOOD_BGR if flooded else SAFE_BGR
     img = Image.new("RGB", (width, height), (r, g, b))
     draw = ImageDraw.Draw(img)
-    big = _font(int(30 * scale))
-    small = _font(int(18 * scale))
-    draw.text((int(14 * scale), int(5 * scale)), vn_text(f"MỨC {level}: {LEVELS[level][1].upper()}"), font=big, fill=(255, 255, 255))
-    draw.text((int(14 * scale), int(42 * scale)), vn_text(line2), font=small, fill=(255, 255, 255))
+    title = "NGẬP" if flooded else "KHÔNG NGẬP"
+    draw.text((int(14 * scale), int(5 * scale)), vn_text(f"{title} · nước {ratio_pct}%"), font=_font(int(30 * scale)), fill=(255, 255, 255))
+    draw.text((int(14 * scale), int(42 * scale)), vn_text(line2), font=_font(int(18 * scale)), fill=(255, 255, 255))
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-def build_overlay(water, objects, h, w):
-    """Lớp màu nước + viền + khung người/xe (kèm bậc) của một lần chạy model."""
-    ov = {"area_color": np.zeros((h, w, 3), np.uint8), "area": water.copy(), "contours": [], "labels": [], "boxes": []}
-    ov["area_color"][water] = CLASS_COLORS["water"]
+
+def build_overlay(water, h, w):
+    """Lớp màu nước + viền của một lần chạy model."""
+    area_color = np.zeros((h, w, 3), np.uint8)
+    area_color[water] = WATER_BGR
     cs, _ = cv2.findContours(water.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    ov["contours"].append((cs, CLASS_COLORS["water"]))
-    for o in objects:
-        if not P.is_valid(o):
-            continue
-        read = o.get("read", True)
-        col = LEVEL_COLORS[o["level"]] if read else UNREAD_COLOR
-        x1, y1, x2, y2 = (int(v) for v in o["box"])
-        tag = "nguoi" if o["kind"] == "person" else P.VEHICLE_TAG[o["cls"]]
-        ov["boxes"].append(((x1, y1, x2, y2), col))
-        ov["labels"].append((f"{tag} B{o['level']}" if read else f"{tag} ?", (x1, y1), col))
-    return ov
+    return {"area_color": area_color, "area": water.copy(), "contours": cs}
 
 
-def draw_legend(img):
-    h = img.shape[0]
-    items = [("nuoc", CLASS_COLORS["water"])] + [(f"vat bac {k}", LEVEL_COLORS[k]) for k in range(4)]
-    y0 = h - 10 - 20 * len(items)
-    cv2.rectangle(img, (6, y0 - 6), (130, h - 6), (0, 0, 0), -1)
-    for k, (name, col) in enumerate(items):
-        y = y0 + 20 * k
-        cv2.rectangle(img, (12, y + 2), (26, y + 14), col, -1)
-        cv2.putText(img, name, (32, y + 13), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-
-
-def render_frame(frame, ov_a, ov_b, t, level, stats, held=False):
-    """Vẽ khung hình nằm giữa 2 lần chạy model: vùng nước hòa trộn dần từ ov_a sang ov_b (t = 0..1);
-    khung vật, viền, nhãn lấy theo lần chạy gần hơn."""
+def render_frame(frame, ov_a, ov_b, t, seg):
+    """Vẽ khung hình nằm giữa 2 lần chạy model: vùng nước hòa trộn dần từ ov_a sang ov_b (t = 0..1)."""
     near = ov_a if t < 0.5 else ov_b
     if ov_a is ov_b or t == 0:
         out = frame.copy()
@@ -191,20 +138,9 @@ def render_frame(frame, ov_a, ov_b, t, level, stats, held=False):
         alpha = (0.5 * (wa + wb))[..., None]
         color = ov_a["area_color"] * wa[..., None] + ov_b["area_color"] * wb[..., None]
         out = (frame * (1 - alpha) + 0.5 * color).astype(np.uint8)
-    for cs, col in near["contours"]:
-        cv2.drawContours(out, cs, -1, col, 2)
-    for (x1, y1, x2, y2), col in near["boxes"]:
-        cv2.rectangle(out, (x1, y1), (x2, y2), col, 2)
-    for text, (x, y), col in near["labels"]:
-        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        y = max(y, th + 4)
-        cv2.rectangle(out, (x, y - th - 4), (x + tw + 4, y), col, -1)
-        cv2.putText(out, text, (x + 2, y - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-    draw_legend(out)
-    line2 = f"Căn cứ: {stats['evidence']}"
-    if held:
-        line2 = f"Giữ mức do vừa ngập vài giây trước · hiện thấy: {stats['evidence'].lower()}"
-    return np.vstack([banner(out.shape[1], level, line2), out])
+    cv2.drawContours(out, near["contours"], -1, WATER_BGR, 2)
+    return np.vstack([banner(out.shape[1], seg["flooded"], round(seg["water_ratio"] * 100), f"Căn cứ: {seg['evidence']}"), out])
+
 
 def open_writer(path, w, h, fps):
     """Ghi H.264 để trình duyệt phát được (mp4v của OpenCV không phát trên web)."""
@@ -215,11 +151,11 @@ def open_writer(path, w, h, fps):
     return writer
 
 
-
 # ---------------- Xử lý cả video ----------------
 
-def process_video(video_path, out_path, progress=None):
-    """Tạo video segmentation có thanh cảnh báo; trả về mức cảnh báo tổng + từng giai đoạn."""
+def process_video(video_path, out_path=None, progress=None, signals_path=None):
+    """Phân tích video; trả về kết quả chung + từng đoạn. out_path=None: không ghi video kết quả.
+    signals_path: ghi mỗi lần suy luận một dòng JSON (tín hiệu thô, chưa qua luật) để mô phỏng ngưỡng mà không chạy lại model."""
     pipe = get_pipeline()
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -237,14 +173,14 @@ def process_video(video_path, out_path, progress=None):
     ground_every = max(1, round(GROUND_EVERY_SECONDS * fps / infer_every))
 
     frames, kf_index, segments = [], [], []   # số liệu từng lần chạy model + chỉ số khung hình tương ứng
-    buf = []       # khung hình đã sẵn overlay của đoạn hiện tại (chờ biết mức của đoạn rồi mới ghi)
+    buf = []       # khung hình đã sẵn overlay của đoạn hiện tại (chờ biết kết quả của đoạn rồi mới ghi)
     pending = []   # khung hình từ lần chạy model trước tới trước lần chạy kế tiếp (chờ để hòa trộn mask)
     prev = None    # (overlay, stats) của lần chạy model trước
-    smoother, tracker, ground = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker(), P.GroundCache(pipe, ground_every)
-    memory, cover = P.DepthMemory(), P.CoverHold()
+    smoother, ground, rule = P.WaterSmoother(MASK_SMOOTH), P.GroundCache(pipe, ground_every), P.FloodRule()
     scenes = SceneCutDetector(round(INFER_FPS))
     scene = 0
-    writer = open_writer(out_path, w, h + banner(w, 0, "").shape[0], fps)
+    writer = open_writer(out_path, w, h + banner(w, False, 0, "").shape[0], fps) if out_path else None
+    sig_file = open(signals_path, "w", encoding="utf-8") if signals_path else None
     idx = seg_start = 0
 
     def flush(end):
@@ -254,22 +190,13 @@ def process_video(video_path, out_path, progress=None):
         cur = [f for f, i in zip(frames, kf_index) if seg_start <= i < end]
         if not cur:
             cur = [max(((f, i) for f, i in zip(frames, kf_index) if i < end), key=lambda x: x[1])[0]]
-        raw = segment_level(cur)
-        seg_scene = cur[-1]["scene"]
-        at = [s for s in cur if s["level"] == raw] or [s for s in cur if s["level"] >= raw]
-        evidence = Counter(s["evidence"] for s in at).most_common(1)[0][0]
-        no_ref = all(s["max_object_level"] is None for s in cur)
-        level = held_level(raw, round(seg_start / fps, 2), seg_scene, segments)
-        segments.append({
-            "start_s": round(seg_start / fps, 2), "end_s": round(end / fps, 2),
-            "level": level, "warning": LEVELS[level][1], "raw_level": raw, "scene": seg_scene, "evidence": evidence,
-            "flood_ratio_max": max(s["flood_ratio"] for s in cur),
-            "object_level_max": max_or_none(s["max_object_level"] for s in cur),
-            "car_level_max": max_or_none(s["max_car_level"] for s in cur),
-            "note": NO_REF_NOTE if no_ref else None,
-        })
-        for frame, ov_a, ov_b, t, st in buf:
-            writer.send(np.ascontiguousarray(render_frame(frame, ov_a, ov_b, t, level, st, held=level > raw)))
+        flooded, ratio, evidence = P.segment_info(cur)
+        seg = {"start_s": round(seg_start / fps, 2), "end_s": round(end / fps, 2), "flooded": flooded,
+               "water_ratio": ratio, "evidence": evidence, "scene": cur[-1]["scene"]}
+        segments.append(seg)
+        if writer:
+            for frame, ov_a, ov_b, t in buf:
+                writer.send(np.ascontiguousarray(render_frame(frame, ov_a, ov_b, t, seg)))
         buf.clear()
         seg_start = end
 
@@ -279,9 +206,7 @@ def process_video(video_path, out_path, progress=None):
         for j, (i, frame) in enumerate(pending):
             if i and i % seg_len == 0:
                 flush(i)
-            t = j / n
-            st = prev[1] if t < 0.5 else nxt[1]
-            buf.append((frame, prev[0], nxt[0], t, st))
+            buf.append((frame, prev[0], nxt[0], j / n))
         pending.clear()
 
     with _lock:  # model không an toàn khi nhiều video dùng cùng lúc
@@ -294,27 +219,26 @@ def process_video(video_path, out_path, progress=None):
                 if idx % infer_every == 0:
                     cut = scenes.update(frame)
                     if cut:
-                        # cảnh mới: không hòa trộn mask từ cảnh cũ, bỏ lịch sử làm mượt mask/vật
+                        # cảnh mới: không hòa trộn mask từ cảnh cũ, bỏ lịch sử làm mượt mask
                         if prev is not None:
                             emit(prev)
-                        smoother, tracker = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker()
+                        smoother = P.WaterSmoother(MASK_SMOOTH)
                         scene += 1
                     ground.update(frame, cut)
-                    water_raw, objs = pipe.infer(frame, veto=ground.veto)
-                    water, objs = smoother.update(water_raw), tracker.update(objs)
-                    gmask = ground.mask if water.any() else None
-                    remembered = memory.update(idx / fps, scene, objs, float(water.mean())) if P.USE_DEPTH_MEMORY else []
-                    _, _, st = P.frame_decision(water, gmask, objs + remembered, h, w)
-                    if P.USE_COVER_DEEP:
-                        cover.apply(idx / fps, scene, st)
-                    stats = {"time_s": round(idx / fps, 2), "scene": scene, **st}
+                    water = smoother.update(pipe.infer(frame, veto=ground.veto))
+                    sig = P.water_signal(water, ground.mask, h, w)
+                    lum = round(float(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).mean()), 1)
+                    if sig_file:
+                        sig_file.write(json.dumps({"idx": idx, "t": round(idx / fps, 3), "scene": scene, **sig, "lum": lum}) + "\n")
+                    stats = {"time_s": round(idx / fps, 2), "idx": idx, "scene": scene, **sig, "lum": lum,
+                             "flooded": rule.update(idx / fps, scene, sig["water_ratio"], lum)}
                     frames.append(stats)
                     kf_index.append(idx)
-                    cur = (build_overlay(water, objs, h, w), stats)
+                    cur = (build_overlay(water, h, w) if writer else None, stats)
                     if prev is not None:
                         emit(cur)
                     prev = cur
-                pending.append((idx, frame))
+                pending.append((idx, frame if writer else None))
                 idx += 1
                 if progress:
                     progress(min(idx / total, 0.99))
@@ -323,38 +247,34 @@ def process_video(video_path, out_path, progress=None):
                 flush(idx)
         finally:
             cap.release()
-            writer.close()
+            if writer:
+                writer.close()
+            if sig_file:
+                sig_file.close()
     if not frames:
         raise ValueError("Video không có khung hình nào")
+    if signals_path:
+        Path(signals_path).with_suffix(".meta.json").write_text(json.dumps(
+            {"fps": fps, "total_frames": idx, "seg_len": seg_len, "infer_every": infer_every, "w": w, "h": h}), encoding="utf-8")
 
-    # Gộp các đoạn liền nhau cùng mức thành một giai đoạn
-    phases = []
+    intervals = []   # các khoảng NGẬP liền nhau
     for s in segments:
-        if phases and phases[-1]["level"] == s["level"]:
-            p = phases[-1]
-            p["end_s"] = s["end_s"]
-            p["flood_ratio_max"] = max(p["flood_ratio_max"], s["flood_ratio_max"])
-            p["object_level_max"] = max_or_none([p["object_level_max"], s["object_level_max"]])
-            p["car_level_max"] = max_or_none([p["car_level_max"], s["car_level_max"]])
-            p["note"] = NO_REF_NOTE if p["object_level_max"] is None else None
-        else:
-            phases.append(dict(s))
-    level = max(s["level"] for s in segments)
+        if s["flooded"]:
+            if intervals and intervals[-1]["end_s"] == s["start_s"]:
+                intervals[-1]["end_s"] = s["end_s"]
+            else:
+                intervals.append({"start_s": s["start_s"], "end_s": s["end_s"]})
+    flooded_s = round(sum(i["end_s"] - i["start_s"] for i in intervals), 2)
     return {
-        "warning_level": level,
-        "warning": LEVELS[level][1],
-        "evidence": next(s["evidence"] for s in segments if s["level"] == level),
+        "flooded": bool(intervals),
+        "flooded_seconds": flooded_s,
+        "flood_intervals": intervals,
+        "summary": (f"Có ngập: {flooded_s:g} giây, {len(intervals)} khoảng" if intervals else "Không ngập"),
         "duration_s": round(idx / fps, 2),
         "frames_analyzed": len(frames),
-        "seconds_per_level": {LEVELS[c][1]: round(sum(p["end_s"] - p["start_s"] for p in phases if p["level"] == c), 2)
-                              for c in range(len(LEVELS))},
-        "flood_ratio_max": max(f["flood_ratio"] for f in frames),
-        "object_level_max": max_or_none(f["max_object_level"] for f in frames),
-        "car_level_max": max_or_none(f["max_car_level"] for f in frames),
-        "note": NO_REF_NOTE if all(f["max_object_level"] is None for f in frames) else None,
+        "water_ratio_max": max(s["water_ratio"] for s in segments),
         "scene_cuts": [f["time_s"] for k, f in enumerate(frames) if k and f["scene"] != frames[k - 1]["scene"]],
         "components": pipe.status(),
-        "phases": phases,
         "segments": segments,
         "frames": frames,
     }

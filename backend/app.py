@@ -1,4 +1,4 @@
-"""Backend đơn giản: upload video -> video segmentation + mức cảnh báo ngập theo từng giai đoạn.
+"""Backend đơn giản: upload video -> video segmentation + NGẬP / KHÔNG NGẬP theo thời gian.
 
 Chạy:  uvicorn app:app --host 0.0.0.0 --port 8000
 Mở http://localhost:8000 để upload bằng trình duyệt, hoặc xem API ở http://localhost:8000/docs

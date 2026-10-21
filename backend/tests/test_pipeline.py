@@ -1,4 +1,5 @@
-"""Unit test luật người, luật cảnh báo, mặt đất, bật/tắt (không cần weights). Chạy: cd backend && python -m unittest discover tests"""
+"""Unit test luật nhị phân NGẬP / KHÔNG NGẬP, tín hiệu nước, đoạn 2 s, mặt đất, bật/tắt (không cần weights).
+Chạy: cd backend && python -m unittest discover tests"""
 import importlib
 import os
 import sys
@@ -10,281 +11,137 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pipeline as P
 
-H = W = 200
+H = W = 100
 
 
-def person_kp(ankle=180, knee=140, hip=100, x=100, conf=0.9, ankle_conf=None):
-    kxy = np.zeros((17, 2), np.float32)
-    kc = np.zeros(17, np.float32)
-    for ids, y in (((11, 12), hip), ((13, 14), knee), ((15, 16), ankle)):
-        for i in ids:
-            kxy[i], kc[i] = (x, y), (conf if ids != (15, 16) or ankle_conf is None else ankle_conf)
-    return kxy, kc
-
-
-def water_from(top, bottom=200, x1=60, x2=140):
-    m = np.zeros((H, W), bool)
-    m[top:bottom, x1:x2] = True
+def mask(frac, shape=(H, W)):
+    m = np.zeros(shape, bool)
+    m.flat[:int(frac * m.size)] = True
     return m
 
 
-BOX = np.array([70, 20, 130, 185])
+def feed(rule, ratios, dt=0.2, scene=0, lum=100, t0=0.0):
+    """Đưa chuỗi độ phủ vào luật (mỗi lần cách dt giây) -> danh sách trạng thái."""
+    return [rule.update(round(t0 + i * dt, 3), scene, r, lum) for i, r in enumerate(ratios)]
 
 
-class PersonRuleTest(unittest.TestCase):
-    def depth(self, top, **kw):
-        kxy, kc = person_kp(**kw)
-        return P.person_depth(kxy, kc, BOX, water_from(top))
+class SignalTest(unittest.TestCase):
+    def test_ratio_over_ground(self):
+        water, ground = mask(0.2), np.zeros((H, W), bool)
+        ground[40:80] = True                                  # 40% khung, không chồng nước
+        s = P.water_signal(water, ground, H, W)
+        self.assertEqual(s["base"], "ground")
+        self.assertAlmostEqual(s["water_ratio"], 0.2 / 0.6, places=3)   # nước / (mặt đất ∪ nước)
+        self.assertAlmostEqual(s["ground_ratio"], 0.6, places=3)
 
-    def test_levels_by_water_edge(self):
-        # mắt cá bị nước che (conf thấp) thì luật mép nước quyết định
-        self.assertEqual(self.depth(175, ankle_conf=0.3, hip=100, knee=140), 1)   # ngang mắt cá
-        self.assertEqual(self.depth(160, ankle_conf=0.3), 2)   # giữa ống chân
-        self.assertEqual(self.depth(110, ankle_conf=0.3, conf=0.9), 2)            # gối nhìn rõ: không báo 3
-        kxy, kc = person_kp(ankle_conf=0.3)
-        kc[13:15] = 0.2   # gối cũng chìm, hông rõ: cả hai tín hiệu cùng chỉ bậc 3
-        self.assertEqual(P.person_depth(kxy, kc, BOX, water_from(140)), 3)
+    def test_fallback_covered(self):
+        s = P.water_signal(mask(0.3), None, H, W)             # không có mặt đất (SegFormer tắt), nước >= 10% khung
+        self.assertEqual((s["base"], s["water_ratio"]), ("covered", 1.0))
 
-    def test_ankle_visible_caps_at_one(self):
-        self.assertEqual(self.depth(140), 1)   # mắt cá conf cao nhưng mép nước cao: lấy bậc thấp
-        self.assertEqual(self.depth(175), 1)
+    def test_fallback_frame(self):
+        s = P.water_signal(mask(0.08), None, H, W)
+        self.assertEqual((s["base"], s["water_ratio"]), ("frame", 0.08))
 
-    def test_ankle_hidden_knee_visible_is_one_or_two(self):
-        self.assertEqual(self.depth(175, ankle_conf=0.2), 1)
-        self.assertEqual(self.depth(160, ankle_conf=0.2), 2)
+    def test_tiny_water_ignored(self):
+        s = P.water_signal(mask(0.003), np.ones((H, W), bool), H, W)
+        self.assertEqual(s["water_ratio"], 0.0)
 
-    def test_pick_depth_prefers_higher_level(self):
-        self.assertEqual(P.pick_depth([0.1, 0.5, 0.36, 0.04]), 2)
-        self.assertEqual(P.pick_depth([0.1, 0.55, 0.3, 0.05]), 1)
-        self.assertEqual(P.pick_depth([0.1, 0.4, 0.2, 0.35]), 3)
-
-    def test_no_water_at_feet_is_zero(self):
-        kxy, kc = person_kp()
-        m = np.zeros((H, W), bool)
-        m[100:130, 60:140] = True   # nước ở xa, không nối liền đáy box
-        self.assertEqual(P.person_depth(kxy, kc, BOX, m), 0)
-
-    def test_needs_knee_or_hip(self):
-        kxy, kc = person_kp()
-        kc[11:15] = 0
-        self.assertIsNone(P.person_depth(kxy, kc, BOX, water_from(150)))
-
-    def test_hip_only_anchor_and_missing_ankle(self):
-        kxy, kc = person_kp()
-        kc[13:17] = 0   # chỉ còn hông; mắt cá lấy theo đáy box
-        self.assertIn(P.person_depth(kxy, kc, BOX, water_from(120)), (2, 3))
-
-    def test_water_behind_person_ignored_outside_leg_columns(self):
-        kxy, kc = person_kp(x=100)
-        m = np.zeros((H, W), bool)
-        m[30:200, 0:20] = True
-        m[175:200, 60:140] = True   # nước cao ở cạnh xa người
-        self.assertEqual(P.person_depth(kxy, kc, BOX, m), 1)
-
-    def test_person_inside_motorbike_box_is_skipped(self):
-        self.assertTrue(P.center_inside(np.array([90, 50, 110, 120]), np.array([60, 40, 140, 190])))
-        self.assertFalse(P.center_inside(np.array([0, 0, 20, 20]), np.array([60, 40, 140, 190])))
+    def test_rounded(self):
+        s = P.water_signal(mask(1 / 3), np.ones((H, W), bool), H, W)
+        self.assertEqual(s["water_ratio"], round(s["water_ratio"], 4))
 
 
-def obj(kind, level, h=100, cls="person"):
-    return {"kind": kind, "cls": cls, "box": np.array([10, 10, 40, 10 + h]), "conf": .9, "level": level}
+class RuleTest(unittest.TestCase):
+    def rule(self, **kw):
+        return P.FloodRule(**{"on": 0.5, "off": 0.3, "hold_s": 1.0, "skip_dark": True, "dark_lum": 40, "reset_on_cut": False, **kw})
+
+    def test_on_needs_hold(self):
+        out = feed(self.rule(), [0.6] * 8)                    # 0.2 s/lần: đủ 1 s ở lần thứ 6
+        self.assertEqual(out, [False] * 5 + [True] * 3)
+
+    def test_short_spike_ignored(self):
+        out = feed(self.rule(), [0.6, 0.6, 0.1, 0.6, 0.6, 0.1] + [0.1] * 4)
+        self.assertFalse(any(out))
+
+    def test_hysteresis_band_keeps_state(self):
+        out = feed(self.rule(hold_s=0), [0.6, 0.4, 0.4, 0.4])   # 0.3 <= 0.4 < 0.5: giữ NGẬP
+        self.assertEqual(out, [True] * 4)
+        out = feed(self.rule(hold_s=0), [0.4, 0.4])             # chưa ngập thì vùng giữa không bật
+        self.assertEqual(out, [False, False])
+
+    def test_off_needs_hold(self):
+        out = feed(self.rule(), [0.6] * 7 + [0.1] * 8)
+        self.assertTrue(out[6] and out[7])                     # vừa tụt dưới off: chưa tắt ngay
+        self.assertTrue(out[11])
+        self.assertFalse(out[12])                              # tụt từ lần 7, đủ 1 s ở lần 12
+
+    def test_dip_during_flood_does_not_turn_off(self):
+        out = feed(self.rule(), [0.6] * 7 + [0.1, 0.1] + [0.6] * 3)
+        self.assertTrue(all(out[6:]))
+
+    def test_scene_cut_ignored_by_default(self):
+        r = self.rule()
+        out = [r.update(round(i * 0.2, 3), i // 2, 0.6, 100) for i in range(8)]   # đổi cảnh mỗi 0.4 s (ảnh tĩnh ghép)
+        self.assertTrue(out[-1])                                # vẫn đủ 1 s liên tục -> NGẬP
+
+    def test_scene_cut_resets_when_enabled(self):
+        r = self.rule(hold_s=0, reset_on_cut=True)
+        self.assertTrue(r.update(0, 0, 0.9, 100))
+        self.assertFalse(r.update(0.2, 1, 0.4, 100))           # cảnh mới: về KHÔNG NGẬP (0.4 < on)
+        self.assertTrue(r.update(0.4, 1, 0.9, 100))
+        r = self.rule(reset_on_cut=True)
+        feed(r, [0.6] * 4)
+        self.assertFalse(any(feed(r, [0.6] * 4, scene=1, t0=0.8)))   # cảnh mới phải chờ lại từ đầu
+
+    def test_dark_frames_skipped(self):
+        r = self.rule(hold_s=0)
+        self.assertTrue(r.update(0, 0, 0.9, 100))
+        self.assertTrue(r.update(0.2, 0, 0.0, 10))             # khung tối: bị bỏ qua, không tắt
+        r2 = self.rule(hold_s=0, skip_dark=False)
+        r2.update(0, 0, 0.9, 100)
+        self.assertFalse(r2.update(0.2, 0, 0.0, 10))           # tắt chế độ bỏ khung tối: khung tối vẫn tính
+
+    def test_defaults_valid(self):
+        self.assertLess(P.FLOOD_OFF, P.FLOOD_ON)
+        self.assertGreaterEqual(P.FLOOD_HOLD_S, 0)
 
 
-class DecisionTest(unittest.TestCase):
-    def decide(self, frac, objs=(), ground=None):
-        water = np.zeros((H, W), bool)
-        water[: int(H * frac), :] = True  # frac = tỉ lệ khung hình
-        return P.frame_decision(water, ground, list(objs), H, W)
-
-    def ground(self, frac_ground):
-        g = np.zeros((H, W), bool)
-        g[H - int(H * frac_ground):, :] = True
-        return g
-
-    def test_no_water_is_zero(self):
-        lv, ev, _ = self.decide(0.0, [obj("person", 3)])
-        self.assertEqual((lv, ev), (0, P.NO_WATER_EVIDENCE))
-
-    def test_level3_only_with_level3_object(self):
-        self.assertEqual(self.decide(1.0)[0], 1)   # độ phủ kín nhưng không có vật: tối đa 1
-        self.assertEqual(self.decide(0.2, [obj("person", 3)])[0], 3)
-        self.assertEqual(self.decide(0.2, [obj("vehicle", 2, cls="car")])[0], 2)
-
-    def test_coverage_ratio_uses_ground(self):
-        lv, ev, st = self.decide(0.3, ground=self.ground(0.5))
-        self.assertEqual(st["ratio_base"], "ground")
-        self.assertEqual(lv, 1)
-        self.assertEqual(ev, P.no_ref_evidence(st["flood_ratio"]))
-        self.assertIn("không ước lượng được độ sâu (không có vật tham chiếu đủ gần)", ev)
-
-    def test_unreadable_objects_do_not_count_or_justify_shallow(self):
-        small = {**obj("vehicle", 0, cls="car"), "read": False}
-        lv, ev, st = self.decide(1.0, [small])
-        self.assertEqual(lv, 1)
-        self.assertTrue(ev.startswith("Nước phủ") and "không ước lượng được độ sâu" in ev)
-        self.assertNotIn("nông", ev)
-        self.assertIsNone(st["max_object_level"])
-        self.assertEqual(st["objects"], 0)
-        unread_high = {**obj("person", 3), "read": False}   # bậc đọc không tin cậy không được nâng mức
-        self.assertEqual(self.decide(0.2, [unread_high])[0], 1)
-
-    def test_shallow_reference_keeps_level_one_despite_high_coverage(self):
-        for o in (obj("person", 1), obj("vehicle", 1, cls="motorcycle")):
-            lv, ev, _ = self.decide(1.0, [o])
-            self.assertEqual(lv, 1)
-            self.assertEqual(ev, P.object_text(o))
-
-    def test_ground_fallback_when_small(self):
-        _, _, st = self.decide(0.03, ground=self.ground(0.01))   # nước + mặt đất < 5% khung hình
-        self.assertEqual(st["ratio_base"], "frame")
-        _, _, st = self.decide(0.5)                              # không có mặt đất (tắt/không nhận được), nước nhiều
-        self.assertEqual(st["ratio_base"], "covered")
-
-    def test_small_objects_ignored(self):
-        self.assertEqual(self.decide(0.05, [obj("person", 3, h=P.PERSON_MIN_H - 1)])[0], 1)
-        self.assertEqual(self.decide(0.05, [obj("vehicle", 3, h=P.VEHICLE_MIN_H - 1, cls="car")])[0], 1)
-        self.assertEqual(self.decide(0.05, [obj("vehicle", 3, h=P.VEHICLE_MIN_H, cls="car")])[0], 3)
+class SegmentTest(unittest.TestCase):
+    def steps(self, pairs, per=10):
+        """pairs: [(flooded, ratio)] mỗi phần tử lặp `per` lần suy luận (khung hình cách 5)."""
+        out = []
+        for flooded, ratio in pairs:
+            out += [{"scene": 0, "water_ratio": ratio, "lum": 100, "flooded": flooded}] * per
+        return [{**s, "idx": i * 5} for i, s in enumerate(out)]
 
     def test_evidence_text(self):
-        self.assertEqual(self.decide(0.2, [obj("person", 3)])[1], "Người lội nước tới gối")
-        self.assertEqual(self.decide(0.2, [obj("vehicle", 2, cls="motorcycle")])[1], "Xe máy ngập quá nửa bánh")
+        self.assertEqual(P.evidence_text(True, 0.85), "Nước phủ 85% mặt đường")
+        self.assertEqual(P.evidence_text(False, 0.12), "Nước ít (12%), chưa ngập")
+        self.assertEqual(P.evidence_text(False, 0.01), "Không thấy nước")
 
+    def test_majority(self):
+        s = [{"flooded": f, "water_ratio": 0.5} for f in (True, True, False, False)]
+        self.assertTrue(P.segment_info(s)[0])                  # đúng 50% -> NGẬP
+        s[1]["flooded"] = False
+        self.assertFalse(P.segment_info(s)[0])
 
-class CoverHoldTest(unittest.TestCase):
-    def st(self, ratio=0.95, objects=0, level=1):
-        return {"level": level, "evidence": "x", "flood_ratio": ratio, "objects": objects}
+    def test_segments_split_and_ratio(self):
+        steps = self.steps([(False, 0.1), (True, 0.8), (True, 0.9)])    # mỗi cụm 10 lần x 5 khung = 50 khung
+        segs = P.segments_from_steps(steps, 150, 50)
+        self.assertEqual([s["flooded"] for s in segs], [False, True, True])
+        self.assertEqual(segs[1]["evidence"], "Nước phủ 80% mặt đường")
+        self.assertEqual(segs[0]["evidence"], "Nước ít (10%), chưa ngập")
 
-    def run_seq(self, hold, steps, **kw):
-        out = []
-        for t, scene, st in steps:
-            out.append(hold.apply(t, scene, st)["level"])
-        return out
+    def test_last_partial_segment_and_gap(self):
+        steps = [{"idx": 0, "scene": 0, "water_ratio": 0.9, "lum": 100, "flooded": True}]
+        segs = P.segments_from_steps(steps, 130, 50)           # đoạn không có lần suy luận: lấy lần gần nhất trước đó
+        self.assertEqual(len(segs), 3)
+        self.assertTrue(all(s["flooded"] for s in segs))
 
-    def test_level2_only_after_hold_seconds(self):
-        h = P.CoverHold(ratio=0.9, seconds=4)
-        steps = [(t * 0.5, 0, self.st()) for t in range(0, 12)]
-        lv = self.run_seq(h, steps)
-        self.assertEqual(lv[:8], [1] * 8)       # t = 0..3.5
-        self.assertEqual(lv[8:], [2] * 4)       # từ t = 4
-        self.assertEqual(steps[-1][2]["evidence"], P.COVER_DEEP_EVIDENCE)
-
-    def test_never_reaches_level3(self):
-        h = P.CoverHold(ratio=0.9, seconds=1)
-        self.assertEqual(max(self.run_seq(h, [(t * 0.5, 0, self.st()) for t in range(40)])), 2)
-
-    def test_readable_object_resets_and_decides(self):
-        h = P.CoverHold(ratio=0.9, seconds=4)
-        steps = [(t * 0.5, 0, self.st()) for t in range(6)] + [(3.0, 0, self.st(objects=1)), (3.5, 0, self.st(objects=1))]
-        steps += [(4.0 + t * 0.5, 0, self.st()) for t in range(6)]
-        lv = self.run_seq(h, steps)
-        self.assertEqual(lv[6:8], [1, 1])       # có vật đọc được: không đổi mức
-        self.assertEqual(lv[8:], [1] * 6)       # đếm lại từ đầu sau khi bị ngắt
-
-    def test_low_coverage_or_scene_cut_resets(self):
-        h = P.CoverHold(ratio=0.9, seconds=4)
-        lv = self.run_seq(h, [(0, 0, self.st()), (3, 0, self.st(ratio=0.5)), (3.5, 0, self.st()), (7.0, 0, self.st())])
-        self.assertEqual(lv, [1, 1, 1, 1])      # ngắt ở t=3 nên t=7 mới là 3.5 s
-        h = P.CoverHold(ratio=0.9, seconds=4)
-        lv = self.run_seq(h, [(0, 0, self.st()), (3, 0, self.st()), (4.5, 1, self.st()), (5, 1, self.st())])
-        self.assertEqual(lv, [1, 1, 1, 1])      # đổi cảnh: bỏ
-
-    def test_no_water_level_stays_zero(self):
-        h = P.CoverHold(ratio=0.9, seconds=0)
-        self.assertEqual(h.apply(0, 0, self.st(level=0))["level"], 0)
-
-
-class BrightenTest(unittest.TestCase):
-    def test_dark_frame_is_brightened_bright_frame_unchanged(self):
-        rng = np.random.default_rng(0)
-        dark = rng.integers(0, 30, (64, 64, 3), dtype=np.uint8)
-        self.assertGreater(P.brighten(dark, dark_lum=60).mean(), dark.mean())
-        light = rng.integers(120, 200, (64, 64, 3), dtype=np.uint8)
-        self.assertIs(P.brighten(light, dark_lum=60), light)
-        self.assertIs(P.brighten(dark, dark_lum=0), dark)   # tắt
-
-
-class TrackerTest(unittest.TestCase):
-    def test_level_needs_two_consecutive_inferences(self):
-        tr = P.ObjectTracker()
-        self.assertEqual(tr.update([obj("person", 3)])[0]["level"], 1)   # lần đầu: chỉ tính tới bậc 1
-        self.assertEqual(tr.update([obj("person", 3)])[0]["level"], 3)
-        self.assertEqual(tr.update([obj("person", 1)])[0]["level"], 1)   # tụt xuống thì theo min
-        self.assertEqual(tr.update([obj("person", 3)])[0]["level"], 1)
-
-    def test_miss_once_keeps_track_twice_drops(self):
-        tr = P.ObjectTracker()
-        tr.update([obj("person", 2)])
-        tr.update([obj("person", 2)])
-        self.assertEqual(len(tr.update([])), 1)
-        self.assertEqual(len(tr.update([])), 0)
-
-    def test_different_kind_not_merged(self):
-        tr = P.ObjectTracker()
-        tr.update([obj("person", 2)])
-        out = tr.update([obj("vehicle", 2, cls="car")])
-        self.assertEqual(sorted(o["kind"] for o in out), ["person", "vehicle"])
-
-
-class WeakTrackTest(unittest.TestCase):
-    def weak(self):
-        return {**obj("vehicle", 2, cls="motorcycle"), "conf": 0.2, "weak": True}
-
-    def test_weak_detection_needs_three_consecutive_steps(self):
-        tr = P.ObjectTracker()
-        self.assertEqual(tr.update([self.weak()]), [])
-        self.assertEqual(tr.update([self.weak()]), [])
-        self.assertEqual(len(tr.update([self.weak()])), 1)
-        self.assertEqual(len(tr.update([])), 1)   # đã xác nhận thì sót 1 lần vẫn giữ
-
-    def test_weak_streak_resets_on_miss(self):
-        tr = P.ObjectTracker()
-        tr.update([self.weak()])
-        tr.update([self.weak()])
-        tr.update([])
-        self.assertEqual(tr.update([self.weak()]), [])
-
-    def test_strong_detection_confirms_track(self):
-        tr = P.ObjectTracker()
-        tr.update([obj("vehicle", 2, cls="motorcycle")])
-        self.assertEqual(len(tr.update([self.weak()])), 1)
-
-
-class DepthMemoryTest(unittest.TestCase):
-    def mem(self):
-        m = P.DepthMemory(seconds=10, keep=0.5)
-        m.update(0.0, 0, [obj("vehicle", 3, cls="motorcycle")], 0.2)
-        return m
-
-    def test_remembers_within_window_with_evidence(self):
-        m = self.mem()
-        rem = m.update(5.0, 0, [], 0.15)
-        self.assertEqual([(o["level"], o["age"]) for o in rem], [(3, 5.0)])
-        water = np.zeros((H, W), bool)
-        water[:60] = True
-        lv, ev, _ = P.frame_decision(water, None, rem, H, W)
-        self.assertEqual(lv, 3)
-        self.assertEqual(ev, "Xe máy ngập hết bánh (đo 5 giây trước, cùng cảnh)")
-
-    def test_expires_after_window(self):
-        self.assertEqual(self.mem().update(10.5, 0, [], 0.2), [])
-
-    def test_water_loss_drops_immediately_and_for_good(self):
-        m = self.mem()
-        self.assertEqual(m.update(2.0, 0, [], 0.05), [])   # < 50% độ phủ lúc đo
-        self.assertEqual(m.update(3.0, 0, [], 0.2), [])    # nước quay lại cũng không khôi phục
-
-    def test_scene_cut_drops(self):
-        self.assertEqual(self.mem().update(2.0, 1, [], 0.2), [])
-
-    def test_current_object_of_same_or_higher_level_wins(self):
-        m = self.mem()
-        self.assertEqual(m.update(2.0, 0, [obj("vehicle", 3, cls="motorcycle")], 0.2), [])
-        self.assertEqual(len(m.update(3.0, 0, [obj("vehicle", 1, cls="motorcycle")], 0.2)), 1)
-
-    def test_level_one_is_not_remembered(self):
-        m = P.DepthMemory(seconds=10, keep=0.5)
-        m.update(0.0, 0, [obj("person", 1)], 0.2)
-        self.assertEqual(m.update(1.0, 0, [], 0.2), [])
+    def test_run_rule_marks_steps(self):
+        steps = [{"idx": i * 5, "scene": 0, "water_ratio": 0.9, "lum": 100} for i in range(10)]
+        out = P.run_rule(steps, 25.0, P.FloodRule(on=0.5, off=0.3, hold_s=0.4, skip_dark=True))
+        self.assertEqual([s["flooded"] for s in out], [False, False, True] + [True] * 7)
 
 
 class SmootherTest(unittest.TestCase):
@@ -318,90 +175,28 @@ class GroundCacheTest(unittest.TestCase):
         self.assertIsNone(c.update(None))
 
 
-class _T:
-    def __init__(self, a):
-        self.a = np.asarray(a)
-
-    def cpu(self):
-        return self
-
-    def numpy(self):
-        return self.a
-
-
-class _Det:
-    def __init__(self, boxes, confs, cls):
-        self.boxes = type("B", (), {"xyxy": _T(boxes), "conf": _T(confs), "cls": _T(cls)})()
-
-    def predict(self, *a, **k):
-        return [self]
-
-
-class _Depth:
-    def __init__(self, probs):
-        self.probs = probs
-
-    def predict(self, crops, **k):
-        return [type("R", (), {"names": {0: "d0", 1: "d1", 2: "d2", 3: "d3"}, "probs": type("P", (), {"data": _T(self.probs)})()})() for _ in crops]
-
-
-class ReadingRulesTest(unittest.TestCase):
-    FH, FW = 800, 800
-
-    def pipe(self, boxes, depth_probs):
-        p = P.FloodPipeline.__new__(P.FloodPipeline)
-        p.device, p.pose, p.water, p.ground = "cpu", None, None, None
-        p.detect = _Det(boxes, [0.9] * len(boxes), [2] * len(boxes))
-        p.depth = _Depth(depth_probs)
-        return p
-
-    def run_vehicles(self, box, probs):
-        frame = np.zeros((self.FH, self.FW, 3), np.uint8)
-        water = np.ones((self.FH, self.FW), bool)
-        cars, _ = self.pipe([box], probs).vehicles(frame, water)
-        return cars[0]
-
-    def test_small_vehicle_is_drawn_but_not_read(self):
-        c = self.run_vehicles([10, 100, 90, 100 + int(P.DEPTH_MIN_FRAC * self.FH) - 3], [0.0, 0.0, 0.0, 1.0])
-        self.assertFalse(c["read"])
-        self.assertEqual(c["level"], 0)
-
-    def test_big_enough_vehicle_is_read(self):
-        c = self.run_vehicles([10, 100, 200, 100 + int(P.DEPTH_MIN_FRAC * self.FH) + 10], [0.0, 0.1, 0.1, 0.8])
-        self.assertEqual((c["level"], c.get("read", True)), (3, True))
-
-    def test_level0_with_base_in_water_is_contradiction(self):
-        c = self.run_vehicles([10, 100, 200, 250], [0.9, 0.05, 0.03, 0.02])
-        self.assertFalse(c["read"])
-
-    def test_dry_vehicle_level0_stays_readable(self):
-        frame = np.zeros((self.FH, self.FW, 3), np.uint8)
-        cars, _ = self.pipe([[10, 100, 200, 250]], [1, 0, 0, 0]).vehicles(frame, np.zeros((self.FH, self.FW), bool))
-        self.assertEqual((cars[0]["level"], cars[0].get("read", True)), (0, True))
-
-    def test_water_veto_removes_water_on_sky_and_buildings(self):
-        p = P.FloodPipeline.__new__(P.FloodPipeline)
-        p.pose = p.detect = p.depth = None
-        wm = np.zeros((20, 20), bool)
-        wm[:, :] = True
-        p.water_mask = lambda f: wm.copy()
-        veto = np.zeros((20, 20), bool)
-        veto[:10] = True
-        water, _ = p.infer(np.zeros((20, 20, 3), np.uint8), veto=veto)
-        self.assertEqual(int(water.sum()), 200)
-        self.assertFalse(water[:10].any())
-        water, _ = p.infer(np.zeros((20, 20, 3), np.uint8))   # không veto: giữ nguyên
-        self.assertTrue(water.all())
-
-
 class FlagTest(unittest.TestCase):
     def test_flags_off(self):
-        old = {k: os.environ.get(k) for k in ("USE_POSE", "USE_DETECT", "USE_DEPTH_CLS", "USE_GROUND", "USE_DEPTH_MEMORY")}
+        old = {k: os.environ.get(k) for k in ("USE_GROUND", "USE_WATER_VETO", "FLOOD_SKIP_DARK")}
         try:
             for k in old:
                 os.environ[k] = "0"
             m = importlib.reload(P)
-            self.assertFalse(any((m.USE_POSE, m.USE_DETECT, m.USE_DEPTH_CLS, m.USE_GROUND, m.USE_DEPTH_MEMORY)))
+            self.assertFalse(any((m.USE_GROUND, m.USE_WATER_VETO, m.FLOOD_SKIP_DARK)))
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            importlib.reload(P)
+
+    def test_env_thresholds(self):
+        old = {k: os.environ.get(k) for k in ("FLOOD_ON", "FLOOD_OFF", "FLOOD_HOLD_S")}
+        try:
+            os.environ.update(FLOOD_ON="0.7", FLOOD_OFF="0.6", FLOOD_HOLD_S="3")
+            m = importlib.reload(P)
+            self.assertEqual((m.FLOOD_ON, m.FLOOD_OFF, m.FLOOD_HOLD_S), (0.7, 0.6, 3.0))
         finally:
             for k, v in old.items():
                 if v is None:

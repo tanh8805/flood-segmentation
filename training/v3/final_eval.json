@@ -1,0 +1,330 @@
+{
+ "cfg_v3": [
+  0.25,
+  0.2,
+  1.0,
+  false
+ ],
+ "n_segments": 82,
+ "v3": {
+  "total": {
+   "tp": 43,
+   "fp": 6,
+   "fn": 1,
+   "tn": 32,
+   "precision": 0.878,
+   "recall": 0.977,
+   "f1": 0.925,
+   "fpr": 0.158
+  },
+  "per_clip": {
+   "ngap_01": {
+    "tp": 36,
+    "fp": 0,
+    "fn": 0,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0
+   },
+   "ngap_02": {
+    "tp": 7,
+    "fp": 0,
+    "fn": 1,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.875,
+    "f1": 0.933,
+    "fpr": 0.0
+   },
+   "khong_ngap_01": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.143
+   },
+   "khong_ngap_02": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.0
+   },
+   "khong_ngap_03": {
+    "tp": 0,
+    "fp": 4,
+    "fn": 0,
+    "tn": 8,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.333
+   }
+  },
+  "wrong": {
+   "ngap_01": [],
+   "ngap_02": [
+    0
+   ],
+   "khong_ngap_01": [
+    2,
+    4
+   ],
+   "khong_ngap_02": [],
+   "khong_ngap_03": [
+    6,
+    10,
+    14,
+    16
+   ]
+  }
+ },
+ "v3_cu_0.15/0.05/1s": {
+  "total": {
+   "tp": 43,
+   "fp": 6,
+   "fn": 1,
+   "tn": 32,
+   "precision": 0.878,
+   "recall": 0.977,
+   "f1": 0.925,
+   "fpr": 0.158
+  },
+  "per_clip": {
+   "ngap_01": {
+    "tp": 36,
+    "fp": 0,
+    "fn": 0,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0
+   },
+   "ngap_02": {
+    "tp": 7,
+    "fp": 0,
+    "fn": 1,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.875,
+    "f1": 0.933,
+    "fpr": 0.0
+   },
+   "khong_ngap_01": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.143
+   },
+   "khong_ngap_02": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.0
+   },
+   "khong_ngap_03": {
+    "tp": 0,
+    "fp": 4,
+    "fn": 0,
+    "tn": 8,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.333
+   }
+  },
+  "wrong": {
+   "ngap_01": [],
+   "ngap_02": [
+    0
+   ],
+   "khong_ngap_01": [
+    2,
+    4
+   ],
+   "khong_ngap_02": [],
+   "khong_ngap_03": [
+    6,
+    10,
+    14,
+    16
+   ]
+  }
+ },
+ "v1": {
+  "total": {
+   "tp": 43,
+   "fp": 4,
+   "fn": 1,
+   "tn": 34,
+   "precision": 0.915,
+   "recall": 0.977,
+   "f1": 0.945,
+   "fpr": 0.105
+  },
+  "per_clip": {
+   "ngap_01": {
+    "tp": 35,
+    "fp": 0,
+    "fn": 1,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.972,
+    "f1": 0.986,
+    "fpr": 0.0
+   },
+   "ngap_02": {
+    "tp": 8,
+    "fp": 0,
+    "fn": 0,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0
+   },
+   "khong_ngap_01": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.143
+   },
+   "khong_ngap_02": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "tn": 10,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.167
+   },
+   "khong_ngap_03": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.0
+   }
+  },
+  "wrong": {
+   "ngap_01": [
+    10
+   ],
+   "ngap_02": [],
+   "khong_ngap_01": [
+    0,
+    14
+   ],
+   "khong_ngap_02": [
+    6,
+    8
+   ],
+   "khong_ngap_03": []
+  }
+ },
+ "v2": {
+  "total": {
+   "tp": 44,
+   "fp": 6,
+   "fn": 0,
+   "tn": 32,
+   "precision": 0.88,
+   "recall": 1.0,
+   "f1": 0.936,
+   "fpr": 0.158
+  },
+  "per_clip": {
+   "ngap_01": {
+    "tp": 36,
+    "fp": 0,
+    "fn": 0,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0
+   },
+   "ngap_02": {
+    "tp": 8,
+    "fp": 0,
+    "fn": 0,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0
+   },
+   "khong_ngap_01": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "tn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.143
+   },
+   "khong_ngap_02": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "tn": 11,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.083
+   },
+   "khong_ngap_03": {
+    "tp": 0,
+    "fp": 3,
+    "fn": 0,
+    "tn": 9,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "fpr": 0.25
+   }
+  },
+  "wrong": {
+   "ngap_01": [],
+   "ngap_02": [],
+   "khong_ngap_01": [
+    0,
+    2
+   ],
+   "khong_ngap_02": [
+    20
+   ],
+   "khong_ngap_03": [
+    4,
+    8,
+    14
+   ]
+  }
+ }
+}

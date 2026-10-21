@@ -17,11 +17,9 @@
     --line: #dce3e8;
     --water: #0b6fae;
     --water-soft: #e3f0f8;
-    /* 4 mức: màu đậm (chữ, viền) + màu nhạt (nền nước dâng) */
-    --l0: #18804a; --l0-soft: #e2f3e8;
-    --l1: #a87700; --l1-soft: #fff1cc;
-    --l2: #cf550b; --l2-soft: #fde4d3;
-    --l3: #c4122f; --l3-soft: #fbdde2;
+    /* 2 trạng thái: màu đậm (chữ, viền) + màu nhạt (nền nước dâng) */
+    --no: #18804a; --no-soft: #e2f3e8;
+    --yes: #c4122f; --yes-soft: #fbdde2;
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -66,7 +64,7 @@
   .progress { width: min(420px, 100%); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 18px; }
   .progress div { height: 100%; width: 0; background: var(--water); transition: width .4s ease; }
   .status { margin: 8px 0 0; font-size: 14px; color: var(--muted); min-height: 1.55em; }
-  .status.error { color: var(--l3); font-weight: 600; }
+  .status.error { color: var(--yes); font-weight: 600; }
 
   .again { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 20px; }
   .again b { font-weight: 600; overflow-wrap: anywhere; }
@@ -88,7 +86,7 @@
   .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); margin-top: 10px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
 
-  /* Bảng cảnh báo trực tiếp: nền nước dâng theo mức của thời điểm đang phát */
+  /* Ô trạng thái trực tiếp: nền nước dâng theo tỉ lệ nước của thời điểm đang phát */
   .live { position: sticky; top: 16px; overflow: hidden; min-height: 360px; display: flex; flex-direction: column; }
   .live .fill {
     position: absolute; left: 0; right: 0; bottom: 0; height: 25%;
@@ -98,10 +96,8 @@
   .live .body { position: relative; padding: 22px 22px 20px; display: flex; flex-direction: column; flex: 1; }
   .live .at { font-size: 14px; color: var(--muted); }
   .live .name { margin: 2px 0 10px; font-size: 44px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; color: var(--strong); transition: color .3s; }
+  .live .ratio { margin: 0 0 10px; font-size: 20px; font-weight: 700; }
   .live .reason { margin: 0; font-size: 16px; }
-  .live .advice { margin: auto 0 0; padding-top: 18px; font-size: 17px; font-weight: 700; color: var(--strong); }
-  .steps { display: flex; gap: 4px; margin: 0 0 16px; }
-  .steps i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); transition: background .3s; }
   .overall { margin: 16px 2px 0; font-size: 14px; color: var(--muted); }
   .overall b { color: var(--ink); font-weight: 600; }
 
@@ -111,7 +107,7 @@
     .live .name { font-size: 36px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .live .fill, .live .name, .progress div, .steps i { transition: none; }
+    .live .fill, .live .name, .progress div { transition: none; }
   }
 </style>
 </head>
@@ -119,7 +115,7 @@
 <main>
   <header>
     <h1>Cảnh báo ngập đường phố</h1>
-    <p>Tải video camera lên, hệ thống cho biết mức ngập ở từng thời điểm của video.</p>
+    <p>Tải video camera lên, hệ thống cho biết đường có ngập hay không ở từng thời điểm của video.</p>
   </header>
 
   <!-- Bước 1: chọn và tải video -->
@@ -153,15 +149,13 @@
           <video id="video" controls playsinline></video>
           <div class="timeline">
             <div class="track-wrap">
-              <div class="track" id="track" tabindex="0" role="slider" aria-label="Mức cảnh báo theo thời gian, bấm để tua" aria-valuemin="0"></div>
+              <div class="track" id="track" tabindex="0" role="slider" aria-label="Ngập hoặc không ngập theo thời gian, bấm để tua" aria-valuemin="0"></div>
               <span class="head" id="head"></span>
             </div>
             <div class="times"><span>0:00</span><span id="endTime"></span></div>
             <div class="legend">
-              <span><i style="background:var(--l0)"></i>An toàn</span>
-              <span><i style="background:var(--l1)"></i>Chú ý</span>
-              <span><i style="background:var(--l2)"></i>Cảnh báo</span>
-              <span><i style="background:var(--l3)"></i>Nguy hiểm</span>
+              <span><i style="background:var(--no)"></i>Không ngập</span>
+              <span><i style="background:var(--yes)"></i>Ngập</span>
             </div>
           </div>
         </div>
@@ -172,10 +166,9 @@
         <div class="fill" id="fill"></div>
         <div class="body">
           <span class="at" id="at">Tại 0:00</span>
-          <div class="name" id="name">An toàn</div>
-          <div class="steps" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="name" id="name">Không ngập</div>
+          <p class="ratio" id="ratio"></p>
           <p class="reason" id="reason"></p>
-          <p class="advice" id="advice"></p>
         </div>
       </aside>
     </div>
@@ -184,10 +177,9 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const NAMES = ["An toàn", "Chú ý", "Cảnh báo", "Nguy hiểm"];
-const ADVICE = ["Đi lại bình thường.", "Đi chậm, quan sát mặt đường.", "Hạn chế đi xe máy qua đoạn này.", "Không nên đi qua."];
 const clock = s => { s = Math.max(0, s || 0); return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); };
-const strong = l => `var(--l${l})`, soft = l => `var(--l${l}-soft)`;
+const strong = f => f ? "var(--yes)" : "var(--no)", soft = f => f ? "var(--yes-soft)" : "var(--no-soft)";
+const NAME = f => f ? "Ngập" : "Không ngập";
 
 let file = null, R = null, segs = [], maxMB = 500;
 
@@ -258,7 +250,7 @@ function fail(msg) { setStatus("Không phân tích được: " + msg, true); $("
 /* ---------- Hiển thị kết quả ---------- */
 function show(job) {
   R = job.result;
-  segs = R.segments && R.segments.length ? R.segments : R.phases;
+  segs = R.segments;
   busy(false);
   drop.hidden = true;
   $("result").hidden = false;
@@ -267,58 +259,41 @@ function show(job) {
   $("endTime").textContent = clock(R.duration_s);
   $("track").setAttribute("aria-valuemax", Math.round(R.duration_s));
 
-  // Dải màu: mỗi đoạn tô theo mức thật của đoạn đó
+  // Dải 2 màu: mỗi đoạn tô theo ngập / không ngập
   $("track").innerHTML = segs.map(s =>
-    `<i style="width:${(s.end_s - s.start_s) / R.duration_s * 100}%;background:${strong(levelOf(s))}" title="${clock(s.start_s)}–${clock(s.end_s)}: ${NAMES[levelOf(s)]}"></i>`
+    `<i style="width:${(s.end_s - s.start_s) / R.duration_s * 100}%;background:${strong(s.flooded)}" title="${clock(s.start_s)}–${clock(s.end_s)}: ${NAME(s.flooded)}"></i>`
   ).join("");
 
-  // Một dòng tổng kết: mức cao nhất và lần đầu xuất hiện
-  const top = Math.max(...segs.map(levelOf));
-  const first = segs.find(s => levelOf(s) === top);
-  const secs = segs.filter(s => levelOf(s) === top).reduce((a, s) => a + s.end_s - s.start_s, 0);
-  $("overall").innerHTML = top === 0
-    ? `Cả video <b>an toàn</b>, không thấy nước ngập.`
-    : `Mức cao nhất trong video: <b>${NAMES[top]}</b>, bắt đầu từ ${clock(first.start_s)}, kéo dài tổng cộng ${Math.round(secs)} giây.`;
+  // Một dòng tổng kết
+  $("overall").innerHTML = R.flooded
+    ? `Video <b>có ngập</b>: tổng cộng ${Math.round(R.flooded_seconds)} giây, ${R.flood_intervals.length} khoảng (${R.flood_intervals.map(i => clock(i.start_s) + "–" + clock(i.end_s)).join(", ")}).`
+    : `Cả video <b>không ngập</b>.`;
 
   update(0);
   scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-}
-
-// Mức tại một thời điểm = mức thật của đoạn (không giữ mức cũ khi nước đã hết)
-const levelOf = s => (s.raw_level ?? s.level);
-
-function reasonOf(s, l) {
-  const car = s.car_level_max;
-  if (l === 0) return "Không thấy nước ngập trên đường.";
-  if (l === 3) return "Có xe bị ngập sâu trong khung hình.";
-  if (l === 2) return car !== null && car !== undefined && car >= 2
-    ? "Có xe bị ngập nông trong khung hình."
-    : "Nước phủ phần lớn mặt đường. Không có xe để ước lượng độ sâu.";
-  return "Có nước trên mặt đường, mức thấp.";
 }
 
 /* ---------- Đồng bộ theo thời gian video ---------- */
 const video = $("video");
 function segAt(t) { const i = segs.findIndex(s => t < s.end_s); return segs[i < 0 ? segs.length - 1 : i]; }
 
-let lastLevel = -1;
+let lastFlooded = null;
 function update(t) {
   if (!R) return;
-  const s = segAt(t), l = levelOf(s);
+  const s = segAt(t), f = s.flooded, pct = Math.round(s.water_ratio * 100);
   $("at").textContent = "Tại " + clock(t);
   $("head").style.left = Math.min(t / R.duration_s * 100, 100) + "%";
   $("track").setAttribute("aria-valuenow", Math.round(t));
-  $("track").setAttribute("aria-valuetext", `${clock(t)}, ${NAMES[l]}`);
-  $("reason").textContent = s.evidence || reasonOf(s, l);
-  if (l === lastLevel) return;
-  lastLevel = l;
+  $("track").setAttribute("aria-valuetext", `${clock(t)}, ${NAME(f)}`);
+  $("ratio").textContent = `Nước phủ ${pct}% mặt đường`;
+  $("reason").textContent = s.evidence;
+  $("fill").style.height = Math.max(8, Math.min(pct, 100)) + "%";
+  if (f === lastFlooded) return;
+  lastFlooded = f;
   const live = $("live");
-  live.style.setProperty("--strong", strong(l));
-  live.style.setProperty("--soft", soft(l));
-  $("fill").style.height = (l + 1) * 25 + "%";
-  $("name").textContent = NAMES[l];
-  $("advice").textContent = ADVICE[l];
-  document.querySelectorAll(".steps i").forEach((el, k) => el.style.background = k <= l ? strong(l) : "");
+  live.style.setProperty("--strong", strong(f));
+  live.style.setProperty("--soft", soft(f));
+  $("name").textContent = NAME(f);
 }
 video.addEventListener("timeupdate", () => update(video.currentTime));
 video.addEventListener("seeked", () => update(video.currentTime));
@@ -333,7 +308,7 @@ $("track").onkeydown = e => {
 /* ---------- Phân tích video khác ---------- */
 $("reset").onclick = () => {
   video.pause(); video.removeAttribute("src"); video.load();
-  R = null; file = null; lastLevel = -1;
+  R = null; file = null; lastFlooded = null;
   $("result").hidden = true; drop.hidden = false;
   $("dropTitle").textContent = "Kéo video vào đây";
   $("chosen").hidden = true; $("go").hidden = true; $("progress").hidden = true;
