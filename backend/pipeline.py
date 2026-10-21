@@ -52,6 +52,9 @@ MEMORY_WATER_KEEP = float(os.getenv("MEMORY_WATER_KEEP", "0.5"))  # nước ph�
 MEMORY_MIN_STEPS = int(os.getenv("MEMORY_MIN_STEPS", "1"))     # bậc b phải được đo ở >= số lần suy luận liên tiếp này mới được nhớ
 DEPTH_MIN_FRAC = float(os.getenv("DEPTH_MIN_FRAC", "0.08"))    # xe: box cao < tỉ lệ này của chiều cao khung thì vẽ box nhưng không đọc độ sâu
 PERSON_READ_MIN_FRAC = float(os.getenv("PERSON_READ_MIN_FRAC", "0.12"))  # người: chỉ đọc độ sâu khi box cao >= tỉ lệ này của khung
+USE_COVER_DEEP = _flag("USE_COVER_DEEP", "0")   # tuỳ chọn, tắt mặc định (xem README)
+COVER_DEEP = float(os.getenv("COVER_DEEP", "0.90"))             # không có vật đọc được + độ phủ >= ngưỡng này liên tục COVER_DEEP_HOLD_S giây -> mức 2
+COVER_DEEP_HOLD_S = float(os.getenv("COVER_DEEP_HOLD_S", "4"))
 PERSON_MIN_H = int(os.getenv("PERSON_MIN_H", "60"))
 VEHICLE_MIN_H = int(os.getenv("VEHICLE_MIN_H", "40"))
 CONTACT_MIN_FRAC = float(os.getenv("CONTACT_MIN_FRAC", "0.03"))  # nước chiếm >= 3% phần dưới box xe mới đưa vào depth_cls
@@ -69,6 +72,7 @@ GROUND_LABELS = ("road", "sidewalk", "path", "earth", "floor")
 VETO_LABELS = ("sky", "building", "house", "tree", "wall", "ceiling", "signboard")   # nước không thể nằm trên các lớp này
 def no_ref_evidence(ratio):
     return f"Nước phủ {ratio:.0%} mặt đường, không ước lượng được độ sâu (không có vật tham chiếu đủ gần)"
+COVER_DEEP_EVIDENCE = "Nước phủ gần kín mặt đường, chưa đo được độ sâu"
 NO_WATER_EVIDENCE = "Không có nước đáng kể"
 
 
@@ -329,6 +333,28 @@ class DepthMemory:
         if best is None or best["level"] <= cur:
             return []
         return [{**{k: v for k, v in best.items() if k not in ("t", "frac")}, "age": t - best["t"]}]
+
+
+class CoverHold:
+    """Độ phủ có điều kiện: KHÔNG có vật đọc được + độ phủ >= `ratio` liên tục >= `seconds` giây cùng cảnh -> mức 2.
+    Có vật đọc được thì vật quyết định; mức 3 chỉ từ vật tham chiếu. Sửa trực tiếp `st` (kết quả frame_decision)."""
+
+    def __init__(self, ratio=None, seconds=None):
+        self.ratio = COVER_DEEP if ratio is None else ratio
+        self.seconds = COVER_DEEP_HOLD_S if seconds is None else seconds
+        self.since, self.scene = None, None
+
+    def apply(self, t, scene, st):
+        cond = st["level"] >= 1 and st["objects"] == 0 and st["flood_ratio"] >= self.ratio
+        if scene != self.scene or not cond:
+            self.since = None
+        self.scene = scene
+        if cond:
+            if self.since is None:
+                self.since = t
+            if t - self.since >= self.seconds and st["level"] < 2:
+                st["level"], st["evidence"] = 2, COVER_DEEP_EVIDENCE
+        return st
 
 
 class GroundCache:

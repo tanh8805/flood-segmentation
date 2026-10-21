@@ -150,6 +150,49 @@ class DecisionTest(unittest.TestCase):
         self.assertEqual(self.decide(0.2, [obj("vehicle", 2, cls="motorcycle")])[1], "Xe máy ngập quá nửa bánh")
 
 
+class CoverHoldTest(unittest.TestCase):
+    def st(self, ratio=0.95, objects=0, level=1):
+        return {"level": level, "evidence": "x", "flood_ratio": ratio, "objects": objects}
+
+    def run_seq(self, hold, steps, **kw):
+        out = []
+        for t, scene, st in steps:
+            out.append(hold.apply(t, scene, st)["level"])
+        return out
+
+    def test_level2_only_after_hold_seconds(self):
+        h = P.CoverHold(ratio=0.9, seconds=4)
+        steps = [(t * 0.5, 0, self.st()) for t in range(0, 12)]
+        lv = self.run_seq(h, steps)
+        self.assertEqual(lv[:8], [1] * 8)       # t = 0..3.5
+        self.assertEqual(lv[8:], [2] * 4)       # từ t = 4
+        self.assertEqual(steps[-1][2]["evidence"], P.COVER_DEEP_EVIDENCE)
+
+    def test_never_reaches_level3(self):
+        h = P.CoverHold(ratio=0.9, seconds=1)
+        self.assertEqual(max(self.run_seq(h, [(t * 0.5, 0, self.st()) for t in range(40)])), 2)
+
+    def test_readable_object_resets_and_decides(self):
+        h = P.CoverHold(ratio=0.9, seconds=4)
+        steps = [(t * 0.5, 0, self.st()) for t in range(6)] + [(3.0, 0, self.st(objects=1)), (3.5, 0, self.st(objects=1))]
+        steps += [(4.0 + t * 0.5, 0, self.st()) for t in range(6)]
+        lv = self.run_seq(h, steps)
+        self.assertEqual(lv[6:8], [1, 1])       # có vật đọc được: không đổi mức
+        self.assertEqual(lv[8:], [1] * 6)       # đếm lại từ đầu sau khi bị ngắt
+
+    def test_low_coverage_or_scene_cut_resets(self):
+        h = P.CoverHold(ratio=0.9, seconds=4)
+        lv = self.run_seq(h, [(0, 0, self.st()), (3, 0, self.st(ratio=0.5)), (3.5, 0, self.st()), (7.0, 0, self.st())])
+        self.assertEqual(lv, [1, 1, 1, 1])      # ngắt ở t=3 nên t=7 mới là 3.5 s
+        h = P.CoverHold(ratio=0.9, seconds=4)
+        lv = self.run_seq(h, [(0, 0, self.st()), (3, 0, self.st()), (4.5, 1, self.st()), (5, 1, self.st())])
+        self.assertEqual(lv, [1, 1, 1, 1])      # đổi cảnh: bỏ
+
+    def test_no_water_level_stays_zero(self):
+        h = P.CoverHold(ratio=0.9, seconds=0)
+        self.assertEqual(h.apply(0, 0, self.st(level=0))["level"], 0)
+
+
 class BrightenTest(unittest.TestCase):
     def test_dark_frame_is_brightened_bright_frame_unchanged(self):
         rng = np.random.default_rng(0)
