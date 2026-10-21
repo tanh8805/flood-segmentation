@@ -130,5 +130,5 @@ Ma trận nhầm của v2 hiện tại (hàng = nhãn, cột = dự đoán): `[[
 - Mức 3 hiếm: cần người tới gối hoặc xe ngập hết bánh được nhận ra; xe ngập gần hết có thể không được detect.
 - Luật người phụ thuộc chất lượng mask nước và keypoint; mask nước kém (phản chiếu, tán cây) làm lệch mép nước.
 - `depth_cls` trên crop video VN chỉ đúng ~55%, thiên về đoán bậc 1 cho nhãn 2; nhãn tay theo contact sheet, không đo thực tế.
-- Test VN nhỏ (51 đoạn, 5 clip, đa số bậc 1–2); chưa thử ban đêm, camera chuyển động nhanh, ngập trong nhà.
+- Bộ test VN 51 đoạn/5 clip đã được dùng để chỉnh luật (độ phủ, ngưỡng, tuỳ chọn cảnh tối) nên số liệu trên lạc quan; cần đánh giá lại trên clip mới. Test nhỏ, đa số bậc 1–2; chưa thử ban đêm, camera chuyển động nhanh, ngập trong nhà.
 - Dữ liệu train nước gồm FRED (CC BY-NC-SA 4.0): dataset không công khai; kiểm tra giấy phép các nguồn trước khi dùng thương mại (xem `training/README.md`).
