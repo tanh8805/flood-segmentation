@@ -1,7 +1,8 @@
 """Phân tích video camera đường phố -> video segmentation + mức cảnh báo ngập theo từng giai đoạn.
 
-Dùng model YOLO-seg đã train từ train.ipynb (class: flood, road, car_dry, car_shallow, car_deep;
-vẫn đọc được model cũ với car_L0..car_L4).
+Cơ chế (xem pipeline.py): model nước tự train, người (yolo11n-pose) và xe (yolo11n) làm vật tham chiếu độ sâu,
+SegFormer ADE20K cho mặt đất. Mức 0..3 theo luật: 0 không có nước; 1 có nước hoặc vật bậc 1;
+2 vật bậc 2 hoặc độ phủ >= 30%; 3 chỉ khi có vật bậc 3.
 Chạy thử không cần server:  python analyzer.py video.mp4 [video_ket_qua.mp4]
 """
 import os
@@ -17,146 +18,40 @@ import cv2
 import numpy as np
 import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont
-from ultralytics import YOLO
 
-MODEL_PATH = os.getenv("MODEL_PATH", str(Path(__file__).parent / "weights" / "best.pt"))
-CONF = float(os.getenv("CONF", "0.5"))                # theo F1 curve: 0.5-0.7 là hợp lý
-IMG_SIZE = int(os.getenv("IMG_SIZE", "640"))
+import pipeline as P
 INFER_FPS = float(os.getenv("INFER_FPS", "5"))        # số lần chạy model mỗi giây video; khung hình ở giữa dùng lại mask gần nhất
 SEGMENT_SECONDS = float(os.getenv("SEGMENT_SECONDS", "2"))  # độ dài mỗi đoạn để tính mức cảnh báo
 MIN_FRAME_FRAC = float(os.getenv("MIN_FRAME_FRAC", "0.5"))  # mức của đoạn = mức cao nhất mà >= 50% khung hình trong đoạn đạt
-ROAD_MIN_FRAC = float(os.getenv("ROAD_MIN_FRAC", "0.05"))              # đường chiếm >= 5% khung hình mới coi là thấy đường
-FLOOD_COVER_MIN_FRAC = float(os.getenv("FLOOD_COVER_MIN_FRAC", "0.10"))  # không thấy đường mà nước >= 10% khung hình -> đường bị phủ kín
-LEVEL_HOLD_SECONDS = float(os.getenv("LEVEL_HOLD_SECONDS", "0"))  # > 0: mức chỉ được giảm khi đã thấp hơn liên tục bấy nhiêu giây; mặc định 0 để mức luôn khớp đúng thời điểm
+GROUND_EVERY_SECONDS = float(os.getenv("GROUND_EVERY_SECONDS", "1"))  # mặt đất (SegFormer) chạy ~1 lần/giây hoặc khi chuyển cảnh
+LEVEL_HOLD_SECONDS = float(os.getenv("LEVEL_HOLD_SECONDS", "0"))  # > 0: mức chỉ được giảm khi đã thấp hơn liên tục bấy nhiêu giây; mặc định 0 để mức theo đúng thời điểm
 SCENE_CUT = float(os.getenv("SCENE_CUT", "0.6"))  # khác biệt màu so với ~1 giây trước vượt ngưỡng này -> chuyển cảnh (1 = tắt)
-MASK_SMOOTH = float(os.getenv("MASK_SMOOTH", "0.6"))  # trọng số lịch sử khi làm mượt mask flood/road giữa các lần chạy model (0 = tắt)
-CAR_HISTORY = int(os.getenv("CAR_HISTORY", "7"))       # level xe = level xuất hiện nhiều nhất trong 7 lần chạy model gần nhất
+MASK_SMOOTH = float(os.getenv("MASK_SMOOTH", "0.6"))  # trọng số lịch sử khi làm mượt mask nước giữa các lần chạy model (0 = tắt)
 OUT_WIDTH = int(os.getenv("OUT_WIDTH", "960"))        # chiều rộng video kết quả (thu nhỏ cho nhẹ)
 MAX_SECONDS = float(os.getenv("MAX_SECONDS", "600"))  # chỉ xử lý tối đa 10 phút đầu
 
-# Mức cảnh báo: (mã, tên, tỉ lệ ngập mặt đường tối thiểu, level xe tối thiểu, màu BGR)
-# Một khung hình đạt mức nếu thỏa ĐIỀU KIỆN NGẬP HOẶC ĐIỀU KIỆN XE.
-# Độ phủ (flood/road) không phải độ sâu: nó chỉ đẩy tới tối đa mức 2; mức 3 (Nguy hiểm) chỉ do xe ngập sâu
-# (car_deep) nên không có ngưỡng độ phủ (None).
+# Mức cảnh báo: (mã, tên, màu BGR). Luật chọn mức nằm ở pipeline.frame_decision.
 LEVELS = [
-    (0, "An toàn", 0.00, 0, (70, 160, 40)),
-    (1, "Chú ý", 0.05, 1, (0, 185, 235)),
-    (2, "Cảnh báo", 0.30, 2, (0, 120, 245)),
-    (3, "Nguy hiểm", None, 3, (40, 30, 210)),
+    (0, "An toàn", (70, 160, 40)),
+    (1, "Chú ý", (0, 185, 235)),
+    (2, "Cảnh báo", (0, 120, 245)),
+    (3, "Nguy hiểm", (40, 30, 210)),
 ]
-NO_CAR_NOTE = "không có xe để ước lượng độ sâu"
-# Màu từng class (BGR) khi vẽ mask
-CLASS_COLORS = {
-    "flood": (230, 120, 20),
-    "road": (150, 150, 150),
-    "car_dry": (80, 200, 80),
-    "car_shallow": (0, 215, 255),
-    "car_deep": (40, 40, 230),
-    "car_L0": (80, 200, 80),
-    "car_L1": (60, 220, 200),
-    "car_L2": (0, 215, 255),
-    "car_L3": (0, 140, 255),
-    "car_L4": (40, 40, 230),
-}
+NO_REF_NOTE = "không có vật tham chiếu để ước lượng độ sâu"
+# Màu vẽ (BGR)
+CLASS_COLORS = {"water": (230, 120, 20), "person": (80, 200, 80), "vehicle": (0, 215, 255)}
+LEVEL_COLORS = {0: (80, 200, 80), 1: (60, 220, 200), 2: (0, 150, 255), 3: (40, 40, 230)}
 
-# Model 3 lớp xe: level xe quy về thang L0..L4 của LEVELS (khô = 0, nông = 2, sâu = 3)
-CAR_DEPTH_LEVEL = {"car_dry": 0, "car_shallow": 2, "car_deep": 3}
-LEVEL_DEPTH_NAME = {0: "car_dry", 2: "car_shallow", 3: "car_deep"}
-DEPTH_VN = {"car_dry": "Khô", "car_shallow": "Nông", "car_deep": "Sâu"}
-# True nếu model đang dùng có car_dry/car_shallow/car_deep (class_map đặt mỗi lần xử lý video).
-# Biến toàn cục: chỉ an toàn khi xử lý 1 video một lúc (max_workers=1).
-DEPTH_MODEL = False
-
-_model = None
+_pipe = None
 _lock = threading.Lock()
 
 
-def get_model():
-    global _model
-    if _model is None:
-        if not Path(MODEL_PATH).exists():
-            raise FileNotFoundError(f"Không thấy model: {MODEL_PATH} (đặt best.pt vào backend/weights/ hoặc set MODEL_PATH)")
-        _model = YOLO(MODEL_PATH)
-    return _model
+def get_pipeline():
+    global _pipe
+    if _pipe is None:
+        _pipe = P.FloodPipeline()
+    return _pipe
 
-
-def class_map(model):
-    """Map class theo tên để không phụ thuộc thứ tự index: id -> (loại, level xe)."""
-    global DEPTH_MODEL
-    cmap = {}
-    for i, name in model.names.items():
-        n = str(name).lower()
-        if n in ("flood", "road"):
-            cmap[int(i)] = (n, None)
-        elif n in CAR_DEPTH_LEVEL:
-            cmap[int(i)] = ("car", CAR_DEPTH_LEVEL[n])
-        elif n.startswith("car_l") and n[-1].isdigit():
-            cmap[int(i)] = ("car", int(n[-1]))
-    DEPTH_MODEL = any(str(n).lower() in CAR_DEPTH_LEVEL for n in model.names.values())
-    if not any(kind == "flood" for kind, _ in cmap.values()):
-        raise ValueError(f"Model không có class 'flood': {model.names}")
-    return cmap
-
-
-# ---------------- Tính mức cảnh báo ----------------
-
-def parse_result(result, cmap):
-    """Kết quả YOLO -> danh sách instance {kind, level, conf, mask, box} (mask cùng kích thước khung hình)."""
-    h, w = result.orig_shape
-    instances = []
-    if result.masks is None or not len(result.boxes):
-        return instances
-    masks = result.masks.data.cpu().numpy() > 0.5
-    for m, c, conf, box in zip(masks, result.boxes.cls.cpu().numpy().astype(int),
-                               result.boxes.conf.cpu().numpy(), result.boxes.xyxy.cpu().numpy()):
-        if c not in cmap:
-            continue
-        if m.shape != (h, w):
-            m = cv2.resize(m.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
-        kind, level = cmap[c]
-        instances.append({"kind": kind, "level": level, "conf": float(conf), "mask": m, "box": box.astype(int)})
-    return instances
-
-
-def level_of(flood_ratio, max_car):
-    level = 0
-    for code, _, min_ratio, min_car, _ in LEVELS[1:]:
-        if (min_ratio is not None and flood_ratio >= min_ratio) or (max_car is not None and max_car >= min_car):
-            level = code
-    return level
-
-
-def frame_stats(instances, h, w):
-    flood = np.zeros((h, w), bool)
-    road = np.zeros((h, w), bool)
-    cars = []
-    for inst in instances:
-        if inst["kind"] == "flood":
-            flood |= inst["mask"]
-        elif inst["kind"] == "road":
-            road |= inst["mask"]
-        else:
-            cars.append(inst["level"])
-    road &= ~flood
-    flood_px, road_px = int(flood.sum()), int(road.sum())
-    # Tỉ lệ ngập so với mặt đường nhìn thấy. Khi thấy rất ít đường:
-    #  - nước nhiều (>= FLOOD_COVER_MIN_FRAC khung hình): đường đã bị nước phủ kín -> vẫn tính trên mặt đường (~100%)
-    #  - nước ít: chỉ là vũng nước (model sót đường) -> tính trên cả khung hình, tránh vũng nhỏ thành 100%
-    if road_px >= ROAD_MIN_FRAC * h * w:
-        ratio_base = "road"
-    elif flood_px >= FLOOD_COVER_MIN_FRAC * h * w:
-        ratio_base = "covered"
-    else:
-        ratio_base = "frame"
-    flood_ratio = flood_px / (h * w) if ratio_base == "frame" else flood_px / (flood_px + road_px)
-    max_car = max(cars, default=None)
-    return {
-        "flood_ratio": round(flood_ratio, 3),
-        "ratio_base": ratio_base,
-        "cars": len(cars),
-        "max_car_level": max_car,
-        "level": level_of(flood_ratio, max_car),
-    }
 
 
 def segment_level(stats):
@@ -172,23 +67,10 @@ def held_level(raw, start_s, scene, prev_segments):
               if p["scene"] == scene and p["end_s"] > start_s - LEVEL_HOLD_SECONDS]
     return max([raw] + recent)
 
-
-def car_class(level):
-    """Tên class xe để chọn màu: theo model 3 lớp (khô/nông/sâu) hoặc car_L0..L4 của model cũ."""
-    return LEVEL_DEPTH_NAME.get(level, f"car_L{level}") if DEPTH_MODEL else f"car_L{level}"
-
-
-def car_text(level):
-    """Mức xe để hiển thị trên thanh cảnh báo: model 3 lớp -> Khô/Nông/Sâu; model cũ -> L0..L4."""
-    return DEPTH_VN.get(car_class(level), f"L{level}")
-
-
 def max_or_none(values):
     values = [v for v in values if v is not None]
     return max(values) if values else None
 
-
-# ---------------- Làm mượt theo thời gian ----------------
 
 class SceneCutDetector:
     """Phát hiện chuyển cảnh (video tin tức cắt ghép) bằng histogram màu HSV: so khung hình hiện tại với
@@ -207,79 +89,6 @@ class SceneCutDetector:
             self.hists.clear()
         self.hists.append(hist)
         return cut
-
-
-def box_iou(a, b):
-    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
-    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-    inter = ix * iy
-    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
-    return inter / union if union > 0 else 0.0
-
-
-class CarTracker:
-    """Nối xe giữa các lần chạy model theo IoU box: level lấy theo đa số gần đây,
-    xe bị sót 1 lần vẫn giữ lại để không nhấp nháy."""
-
-    def __init__(self, min_iou=0.3, hold=1):
-        self.tracks, self.min_iou, self.hold = [], min_iou, hold
-
-    def update(self, cars):
-        pairs = sorted(((box_iou(t["inst"]["box"], c["box"]), ti, ci)
-                        for ti, t in enumerate(self.tracks) for ci, c in enumerate(cars)), reverse=True)
-        t2c, c2t = {}, {}
-        for iou, ti, ci in pairs:
-            if iou < self.min_iou:
-                break
-            if ti not in t2c and ci not in c2t:
-                t2c[ti], c2t[ci] = ci, ti
-        tracks = []
-        for ti, t in enumerate(self.tracks):
-            if ti in t2c:
-                t["inst"], t["missed"] = cars[t2c[ti]], 0
-                t["levels"].append(t["inst"]["level"])
-            else:
-                t["missed"] += 1
-            if t["missed"] <= self.hold:
-                tracks.append(t)
-        for ci, c in enumerate(cars):
-            if ci not in c2t:
-                tracks.append({"inst": c, "missed": 0, "levels": deque([c["level"]], maxlen=CAR_HISTORY)})
-        self.tracks = tracks
-        out = []
-        for t in tracks:
-            counts = Counter(t["levels"])
-            level = max(counts, key=lambda lv: (counts[lv], lv))  # hòa thì lấy level cao hơn cho an toàn
-            out.append({**t["inst"], "level": level})
-        return out
-
-
-class TemporalSmoother:
-    """flood/road: trung bình trượt mask + ngưỡng trễ (bật khi > 0.5, chỉ tắt khi < 0.25) để vùng không
-    nhấp nháy khi model lúc thấy lúc không; xe: CarTracker."""
-
-    def __init__(self, on=0.5, off=0.25):
-        self.maps, self.state = {}, {}
-        self.on, self.off = on, off
-        self.cars = CarTracker()
-
-    def update(self, instances, h, w):
-        out = []
-        for kind in ("road", "flood"):
-            cur = np.zeros((h, w), np.float32)
-            for inst in instances:
-                if inst["kind"] == kind:
-                    cur[inst["mask"]] = 1.0
-            if MASK_SMOOTH > 0 and kind in self.maps:
-                cur = (1 - MASK_SMOOTH) * cur + MASK_SMOOTH * self.maps[kind]
-            self.maps[kind] = cur
-            mask = cur > self.on
-            if MASK_SMOOTH > 0 and kind in self.state:
-                mask |= self.state[kind] & (cur > self.off)
-            self.state[kind] = mask
-            if mask.any():
-                out.append({"kind": kind, "level": None, "conf": 1.0, "mask": mask, "box": None})
-        return out + self.cars.update([i for i in instances if i["kind"] == "car"])
 
 
 # ---------------- Vẽ lên video ----------------
@@ -329,7 +138,7 @@ def banner(width, level, line2):
     """Thanh cảnh báo phía trên video (PIL để hiển thị được tiếng Việt)."""
     scale = width / 960
     height = int(70 * scale)
-    b, g, r = LEVELS[level][4]
+    b, g, r = LEVELS[level][2]
     img = Image.new("RGB", (width, height), (r, g, b))
     draw = ImageDraw.Draw(img)
     big = _font(int(30 * scale))
@@ -338,47 +147,37 @@ def banner(width, level, line2):
     draw.text((int(14 * scale), int(42 * scale)), vn_text(line2), font=small, fill=(255, 255, 255))
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-
-def build_overlay(instances, h, w):
-    """Lớp màu mask + viền + nhãn xe của một lần chạy model; tách vùng (flood/road) và xe."""
-    ov = {"area_color": np.zeros((h, w, 3), np.uint8), "area": np.zeros((h, w), bool),
-          "car_color": np.zeros((h, w, 3), np.uint8), "car": np.zeros((h, w), bool),
-          "contours": [], "labels": []}
-    order = {"road": 0, "flood": 1, "car": 2}  # vẽ xe sau cùng để nằm trên nước/đường
-    for inst in sorted(instances, key=lambda i: order[i["kind"]]):
-        is_car = inst["kind"] == "car"
-        name = car_class(inst["level"]) if is_car else inst["kind"]
-        col = CLASS_COLORS[name]
-        prefix = "car" if is_car else "area"
-        ov[prefix + "_color"][inst["mask"]] = col
-        ov[prefix] |= inst["mask"]
-        cs, _ = cv2.findContours(inst["mask"].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        ov["contours"].append((cs, col))
-        if is_car:
-            tag = name.replace("car_", "") if DEPTH_MODEL else f"L{inst['level']}"  # nhãn OpenCV: không dấu
-            ov["labels"].append((f"{tag} {inst['conf']:.2f}", tuple(inst["box"][:2]), col))
+def build_overlay(water, objects, h, w):
+    """Lớp màu nước + viền + khung người/xe (kèm bậc) của một lần chạy model."""
+    ov = {"area_color": np.zeros((h, w, 3), np.uint8), "area": water.copy(), "contours": [], "labels": [], "boxes": []}
+    ov["area_color"][water] = CLASS_COLORS["water"]
+    cs, _ = cv2.findContours(water.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ov["contours"].append((cs, CLASS_COLORS["water"]))
+    for o in objects:
+        if not P.is_valid(o):
+            continue
+        col = LEVEL_COLORS[o["level"]]
+        x1, y1, x2, y2 = (int(v) for v in o["box"])
+        tag = "nguoi" if o["kind"] == "person" else P.VEHICLE_TAG[o["cls"]]
+        ov["boxes"].append(((x1, y1, x2, y2), col))
+        ov["labels"].append((f"{tag} B{o['level']}", (x1, y1), col))
     return ov
-
-
-def legend_classes():
-    keep = (lambda n: not n.startswith("car_L")) if DEPTH_MODEL else (lambda n: n not in CAR_DEPTH_LEVEL)
-    return {n: c for n, c in CLASS_COLORS.items() if keep(n)}
 
 
 def draw_legend(img):
     h = img.shape[0]
-    classes = legend_classes()
-    y0 = h - 10 - 20 * len(classes)
+    items = [("nuoc", CLASS_COLORS["water"])] + [(f"vat bac {k}", LEVEL_COLORS[k]) for k in range(4)]
+    y0 = h - 10 - 20 * len(items)
     cv2.rectangle(img, (6, y0 - 6), (130, h - 6), (0, 0, 0), -1)
-    for k, (name, col) in enumerate(classes.items()):
+    for k, (name, col) in enumerate(items):
         y = y0 + 20 * k
         cv2.rectangle(img, (12, y + 2), (26, y + 14), col, -1)
         cv2.putText(img, name, (32, y + 13), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
 
 
-def render_frame(frame, ov_a, ov_b, t, level, stats, held=False, no_car=False):
-    """Vẽ khung hình nằm giữa 2 lần chạy model: vùng flood/road hòa trộn dần từ ov_a sang ov_b
-    (t = 0..1) để mask không đứng yên rồi nhảy; xe, viền, nhãn lấy theo lần chạy gần hơn."""
+def render_frame(frame, ov_a, ov_b, t, level, stats, held=False):
+    """Vẽ khung hình nằm giữa 2 lần chạy model: vùng nước hòa trộn dần từ ov_a sang ov_b (t = 0..1);
+    khung vật, viền, nhãn lấy theo lần chạy gần hơn."""
     near = ov_a if t < 0.5 else ov_b
     if ov_a is ov_b or t == 0:
         out = frame.copy()
@@ -390,24 +189,20 @@ def render_frame(frame, ov_a, ov_b, t, level, stats, held=False, no_car=False):
         alpha = (0.5 * (wa + wb))[..., None]
         color = ov_a["area_color"] * wa[..., None] + ov_b["area_color"] * wb[..., None]
         out = (frame * (1 - alpha) + 0.5 * color).astype(np.uint8)
-    m = near["car"]
-    out[m] = (out[m] * 0.5 + near["car_color"][m] * 0.5).astype(np.uint8)
     for cs, col in near["contours"]:
         cv2.drawContours(out, cs, -1, col, 2)
+    for (x1, y1, x2, y2), col in near["boxes"]:
+        cv2.rectangle(out, (x1, y1), (x2, y2), col, 2)
     for text, (x, y), col in near["labels"]:
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
         y = max(y, th + 4)
         cv2.rectangle(out, (x, y - th - 4), (x + tw + 4, y), col, -1)
         cv2.putText(out, text, (x + 2, y - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
     draw_legend(out)
-    car = "không có xe" if stats["max_car_level"] is None else car_text(stats["max_car_level"])
-    base = {"road": "mặt đường", "covered": "mặt đường (đã phủ kín)", "frame": "khung hình (không thấy đường)"}[stats["ratio_base"]]
-    line2 = f"Ngập {stats['flood_ratio']:.0%} {base} · " + (NO_CAR_NOTE if no_car else f"Xe ngập cao nhất: {car}")
+    line2 = f"Căn cứ: {stats['evidence']}"
     if held:
-        line2 = f"Giữ mức do vừa ngập vài giây trước · hiện thấy: ngập {stats['flood_ratio']:.0%}, xe: {car}"
-    top = banner(out.shape[1], level, line2)
-    return np.vstack([top, out])
-
+        line2 = f"Giữ mức do vừa ngập vài giây trước · hiện thấy: {stats['evidence'].lower()}"
+    return np.vstack([banner(out.shape[1], level, line2), out])
 
 def open_writer(path, w, h, fps):
     """Ghi H.264 để trình duyệt phát được (mp4v của OpenCV không phát trên web)."""
@@ -418,12 +213,12 @@ def open_writer(path, w, h, fps):
     return writer
 
 
+
 # ---------------- Xử lý cả video ----------------
 
 def process_video(video_path, out_path, progress=None):
     """Tạo video segmentation có thanh cảnh báo; trả về mức cảnh báo tổng + từng giai đoạn."""
-    model = get_model()
-    cmap = class_map(model)
+    pipe = get_pipeline()
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise ValueError("Không đọc được video (định dạng không hỗ trợ hoặc file hỏng)")
@@ -437,12 +232,13 @@ def process_video(video_path, out_path, progress=None):
     total = min(int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0), max_frames) or max_frames
     infer_every = max(1, round(fps / INFER_FPS))
     seg_len = max(infer_every, round(SEGMENT_SECONDS * fps))
+    ground_every = max(1, round(GROUND_EVERY_SECONDS * fps / infer_every))
 
     frames, kf_index, segments = [], [], []   # số liệu từng lần chạy model + chỉ số khung hình tương ứng
     buf = []       # khung hình đã sẵn overlay của đoạn hiện tại (chờ biết mức của đoạn rồi mới ghi)
     pending = []   # khung hình từ lần chạy model trước tới trước lần chạy kế tiếp (chờ để hòa trộn mask)
     prev = None    # (overlay, stats) của lần chạy model trước
-    smoother = TemporalSmoother()
+    smoother, tracker, ground = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker(), P.GroundCache(pipe, ground_every)
     scenes = SceneCutDetector(round(INFER_FPS))
     scene = 0
     writer = open_writer(out_path, w, h + banner(w, 0, "").shape[0], fps)
@@ -457,17 +253,20 @@ def process_video(video_path, out_path, progress=None):
             cur = [max(((f, i) for f, i in zip(frames, kf_index) if i < end), key=lambda x: x[1])[0]]
         raw = segment_level(cur)
         seg_scene = cur[-1]["scene"]
-        no_car = all(s["max_car_level"] is None for s in cur)
+        at = [s for s in cur if s["level"] == raw] or [s for s in cur if s["level"] >= raw]
+        evidence = Counter(s["evidence"] for s in at).most_common(1)[0][0]
+        no_ref = all(s["max_object_level"] is None for s in cur)
         level = held_level(raw, round(seg_start / fps, 2), seg_scene, segments)
         segments.append({
             "start_s": round(seg_start / fps, 2), "end_s": round(end / fps, 2),
-            "level": level, "warning": LEVELS[level][1], "raw_level": raw, "scene": seg_scene,
+            "level": level, "warning": LEVELS[level][1], "raw_level": raw, "scene": seg_scene, "evidence": evidence,
             "flood_ratio_max": max(s["flood_ratio"] for s in cur),
+            "object_level_max": max_or_none(s["max_object_level"] for s in cur),
             "car_level_max": max_or_none(s["max_car_level"] for s in cur),
-            "note": NO_CAR_NOTE if no_car else None,
+            "note": NO_REF_NOTE if no_ref else None,
         })
         for frame, ov_a, ov_b, t, st in buf:
-            writer.send(np.ascontiguousarray(render_frame(frame, ov_a, ov_b, t, level, st, held=level > raw, no_car=no_car)))
+            writer.send(np.ascontiguousarray(render_frame(frame, ov_a, ov_b, t, level, st, held=level > raw)))
         buf.clear()
         seg_start = end
 
@@ -482,7 +281,7 @@ def process_video(video_path, out_path, progress=None):
             buf.append((frame, prev[0], nxt[0], t, st))
         pending.clear()
 
-    with _lock:  # model YOLO không an toàn khi nhiều video dùng cùng lúc
+    with _lock:  # model không an toàn khi nhiều video dùng cùng lúc
         try:
             while idx < max_frames:
                 ok, frame = cap.read()
@@ -490,18 +289,21 @@ def process_video(video_path, out_path, progress=None):
                     break
                 frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
                 if idx % infer_every == 0:
-                    if scenes.update(frame):
-                        # cảnh mới: không hòa trộn mask từ cảnh cũ, bỏ lịch sử làm mượt mask/xe
+                    cut = scenes.update(frame)
+                    if cut:
+                        # cảnh mới: không hòa trộn mask từ cảnh cũ, bỏ lịch sử làm mượt mask/vật
                         if prev is not None:
                             emit(prev)
-                        smoother = TemporalSmoother()
+                        smoother, tracker = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker()
                         scene += 1
-                    r = model.predict(frame, conf=CONF, imgsz=IMG_SIZE, retina_masks=True, verbose=False)[0]
-                    instances = smoother.update(parse_result(r, cmap), h, w)
-                    stats = {"time_s": round(idx / fps, 2), "scene": scene, **frame_stats(instances, h, w)}
+                    water_raw, objs = pipe.infer(frame)
+                    water, objs = smoother.update(water_raw), tracker.update(objs)
+                    gmask = ground.update(frame, cut) if water.any() else None
+                    _, _, st = P.frame_decision(water, gmask, objs, h, w)
+                    stats = {"time_s": round(idx / fps, 2), "scene": scene, **st}
                     frames.append(stats)
                     kf_index.append(idx)
-                    cur = (build_overlay(instances, h, w), stats)
+                    cur = (build_overlay(water, objs, h, w), stats)
                     if prev is not None:
                         emit(cur)
                     prev = cur
@@ -525,22 +327,26 @@ def process_video(video_path, out_path, progress=None):
             p = phases[-1]
             p["end_s"] = s["end_s"]
             p["flood_ratio_max"] = max(p["flood_ratio_max"], s["flood_ratio_max"])
+            p["object_level_max"] = max_or_none([p["object_level_max"], s["object_level_max"]])
             p["car_level_max"] = max_or_none([p["car_level_max"], s["car_level_max"]])
-            p["note"] = NO_CAR_NOTE if p["car_level_max"] is None else None
+            p["note"] = NO_REF_NOTE if p["object_level_max"] is None else None
         else:
             phases.append(dict(s))
     level = max(s["level"] for s in segments)
     return {
         "warning_level": level,
         "warning": LEVELS[level][1],
+        "evidence": next(s["evidence"] for s in segments if s["level"] == level),
         "duration_s": round(idx / fps, 2),
         "frames_analyzed": len(frames),
         "seconds_per_level": {LEVELS[c][1]: round(sum(p["end_s"] - p["start_s"] for p in phases if p["level"] == c), 2)
                               for c in range(len(LEVELS))},
         "flood_ratio_max": max(f["flood_ratio"] for f in frames),
+        "object_level_max": max_or_none(f["max_object_level"] for f in frames),
         "car_level_max": max_or_none(f["max_car_level"] for f in frames),
-        "note": NO_CAR_NOTE if all(f["max_car_level"] is None for f in frames) else None,
+        "note": NO_REF_NOTE if all(f["max_object_level"] is None for f in frames) else None,
         "scene_cuts": [f["time_s"] for k, f in enumerate(frames) if k and f["scene"] != frames[k - 1]["scene"]],
+        "components": pipe.status(),
         "phases": phases,
         "segments": segments,
         "frames": frames,

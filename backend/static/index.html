@@ -309,7 +309,7 @@ function update(t) {
   $("head").style.left = Math.min(t / R.duration_s * 100, 100) + "%";
   $("track").setAttribute("aria-valuenow", Math.round(t));
   $("track").setAttribute("aria-valuetext", `${clock(t)}, ${NAMES[l]}`);
-  $("reason").textContent = reasonOf(s, l);
+  $("reason").textContent = s.evidence || reasonOf(s, l);
   if (l === lastLevel) return;
   lastLevel = l;
   const live = $("live");

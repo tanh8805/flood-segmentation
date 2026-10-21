@@ -26,7 +26,7 @@ executor = ThreadPoolExecutor(max_workers=1)  # xử lý lần lượt từng vi
 
 @asynccontextmanager
 async def lifespan(app):
-    analyzer.get_model()  # nạp model 1 lần khi khởi động, báo lỗi sớm nếu thiếu best.pt
+    analyzer.get_pipeline()  # nạp model 1 lần khi khởi động, báo lỗi sớm nếu thiếu weights nước
     yield
 
 
@@ -53,7 +53,7 @@ def run_job(job_id, video_path):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": analyzer.MODEL_PATH, "max_upload_mb": MAX_UPLOAD_MB}
+    return {"status": "ok", "model": analyzer.P.WATER_MODEL_PATH, "components": analyzer.get_pipeline().status(), "max_upload_mb": MAX_UPLOAD_MB}
 
 
 @app.post("/analyze")

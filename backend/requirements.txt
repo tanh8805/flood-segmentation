@@ -5,3 +5,4 @@ python-multipart>=0.0.9
 opencv-python-headless>=4.8
 numpy
 imageio-ffmpeg>=0.5
+transformers>=4.40
