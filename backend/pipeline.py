@@ -37,7 +37,7 @@ KP_HIGH = float(os.getenv("KP_HIGH", "0.7"))                   # mắt cá conf 
 DEPTH_UP_P = float(os.getenv("DEPTH_UP_P", "0.35"))            # depth_cls: xác suất bậc cao hơn >= ngưỡng này thì chọn bậc cao (thiên về an toàn)
 WATER_MIN_FRAME_FRAC = float(os.getenv("WATER_MIN_FRAME_FRAC", "0.005"))  # nước < 0.5% khung hình: coi như không có
 WATER_MIN_RATIO = float(os.getenv("WATER_MIN_RATIO", "0.05"))  # độ phủ nước/mặt đất tối thiểu để tính là "có nước"
-COVER_LEVEL2 = float(os.getenv("COVER_LEVEL2", "0.30"))        # độ phủ >= 30% -> bậc 2
+COVER_WIDE = float(os.getenv("COVER_WIDE", "0.30"))        # độ phủ >= 30%: chỉ đổi evidence ("nước phủ rộng"), mức vẫn tối đa 1
 GROUND_MIN_FRAC = float(os.getenv("GROUND_MIN_FRAC", "0.05"))  # mặt đất < 5% khung hình -> logic dự phòng
 FLOOD_COVER_MIN_FRAC = float(os.getenv("FLOOD_COVER_MIN_FRAC", "0.10"))  # dự phòng: nước >= 10% khung hình -> mặt đường bị phủ kín
 PERSON_MIN_H = int(os.getenv("PERSON_MIN_H", "60"))
@@ -55,6 +55,7 @@ VEHICLE_DEPTH_TEXT = {1: "dưới nửa bánh", 2: "quá nửa bánh", 3: "hết
 PERSON_DEPTH_TEXT = {1: "tới mắt cá", 2: "tới giữa ống chân", 3: "tới gối"}
 GROUND_LABELS = ("road", "sidewalk", "path", "earth", "floor")
 NO_REF_EVIDENCE = "Không có vật tham chiếu, chỉ dựa vào độ phủ"
+WIDE_WATER_EVIDENCE = "Nước phủ rộng, không có vật tham chiếu để ước lượng độ sâu"
 NO_WATER_EVIDENCE = "Không có nước đáng kể"
 
 
@@ -182,7 +183,7 @@ def frame_decision(water, ground, objects, h, w):
     level = 0
     if has_water or obj_lv >= 1:
         level = 1
-    if obj_lv >= 2 or (has_water and ratio >= COVER_LEVEL2):
+    if obj_lv >= 2:   # độ phủ một mình tối đa mức 1: mức 2, 3 chỉ đến từ vật tham chiếu
         level = 2
     if obj_lv >= 3:
         level = 3
@@ -191,7 +192,9 @@ def frame_decision(water, ground, objects, h, w):
     elif top and obj_lv == level:
         evidence = object_text(top)
     elif valid:
-        evidence = f"Dựa vào độ phủ nước {ratio:.0%}, vật tham chiếu chưa ngập sâu"
+        evidence = f"Vật tham chiếu chỉ ngập nông, độ phủ nước {ratio:.0%}"
+    elif ratio >= COVER_WIDE:
+        evidence = WIDE_WATER_EVIDENCE
     else:
         evidence = NO_REF_EVIDENCE
     vehicles = [o["level"] for o in valid if o["kind"] == "vehicle"]

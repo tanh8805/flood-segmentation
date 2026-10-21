@@ -2,7 +2,7 @@
 
 Cơ chế (xem pipeline.py): model nước tự train, người (yolo11n-pose) và xe (yolo11n) làm vật tham chiếu độ sâu,
 SegFormer ADE20K cho mặt đất. Mức 0..3 theo luật: 0 không có nước; 1 có nước hoặc vật bậc 1;
-2 vật bậc 2 hoặc độ phủ >= 30%; 3 chỉ khi có vật bậc 3.
+2 chỉ khi có vật bậc 2; 3 chỉ khi có vật bậc 3 (độ phủ một mình tối đa mức 1).
 Chạy thử không cần server:  python analyzer.py video.mp4 [video_ket_qua.mp4]
 """
 import os

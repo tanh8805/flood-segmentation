@@ -22,7 +22,18 @@ Bậc độ sâu 0–3: 0 không chạm nước · 1 mắt cá / dưới nửa b
 
 **Xe**: chỉ xe có ≥ 3% phần dưới box chạm nước mới chạy `depth_cls` (crop nới box 20%); xe không chạm nước là bậc 0. Chọn bậc cao hơn top-1 nếu xác suất của nó ≥ 0.35 (`DEPTH_UP_P`, thiên về an toàn).
 
-**Mức của khung hình**: 0 không có nước đáng kể · 1 có nước hoặc vật bậc 1 · 2 vật bậc 2 hoặc độ phủ nước/mặt đất ≥ 30% · 3 **chỉ** khi có vật bậc 3. Vật hợp lệ: người cao ≥ 60 px, xe cao ≥ 40 px, giữ bậc ≥ 2 lần suy luận liên tiếp. Khung không có nước thì bỏ qua pose/detect/cls. Mặt đất < 5% khung → logic dự phòng (nước ≥ 10% khung coi là phủ kín).
+**Mức của khung hình** (độ phủ một mình tối đa mức 1; mức 2, 3 chỉ đến từ vật tham chiếu):
+
+| Mức | Điều kiện | Căn cứ (`evidence`) |
+|---|---|---|
+| 0 | không có nước đáng kể (nước < 0.5% khung hoặc độ phủ < 5%) và không có vật bậc ≥ 1 | "Không có nước đáng kể" |
+| 1 | có nước, hoặc vật bậc 1; vật tham chiếu chạm nước mà tất cả bậc ≤ 1 vẫn là mức 1 dù độ phủ cao | tên vật ("Người lội nước tới mắt cá") hoặc "Vật tham chiếu chỉ ngập nông, độ phủ nước …" |
+| 1 | không có vật tham chiếu, độ phủ ≥ 30% | "Nước phủ rộng, không có vật tham chiếu để ước lượng độ sâu" |
+| 1 | không có vật tham chiếu, độ phủ < 30% | "Không có vật tham chiếu, chỉ dựa vào độ phủ" |
+| 2 | có vật bậc 2 | "Người lội nước tới giữa ống chân", "Xe máy ngập quá nửa bánh"… |
+| 3 | **chỉ** khi có vật bậc 3 | "Người lội nước tới gối", "Ô tô ngập hết bánh"… |
+
+Vật hợp lệ: người cao ≥ 60 px, xe cao ≥ 40 px, giữ bậc ≥ 2 lần suy luận liên tiếp. Khung không có nước thì bỏ qua pose/detect/cls. Mặt đất < 5% khung → logic dự phòng (nước ≥ 10% khung coi là phủ kín).
 
 **Theo thời gian**: 5 lần suy luận/giây, mask nước làm mượt có ngưỡng trễ, đoạn 2 giây (mức đoạn = mức cao nhất mà ≥ 50% khung hình đạt), phát hiện chuyển cảnh bằng histogram màu, mặt đất chạy ~1 lần/giây hoặc khi chuyển cảnh. Các đoạn liền nhau cùng mức gộp thành giai đoạn; mức cả video là mức cao nhất.
 
@@ -63,7 +74,7 @@ Bật/tắt từng phần bằng biến môi trường `USE_POSE`, `USE_DETECT`,
 | `WATER_MODEL_PATH` / `POSE_MODEL_PATH` / `DETECT_MODEL_PATH` / `DEPTH_MODEL_PATH` | `weights/…` | đường dẫn model |
 | `GROUND_MODEL` | `nvidia/segformer-b2-finetuned-ade-512-512` | model mặt đất |
 | `WATER_CONF` / `OBJ_CONF` / `KP_CONF` / `KP_HIGH` | 0.4 / 0.35 / 0.5 / 0.7 | ngưỡng conf: nước / vật / keypoint / mắt cá "cao" |
-| `COVER_LEVEL2` | 0.30 | độ phủ nước/mặt đất để đạt bậc 2 |
+| `COVER_WIDE` | 0.30 | độ phủ nước/mặt đất từ mức này thì căn cứ ghi "Nước phủ rộng" (mức vẫn tối đa 1) |
 | `DEPTH_UP_P` | 0.35 | chọn bậc cao hơn của depth_cls nếu xác suất ≥ giá trị này |
 | `SHALLOW_F` / `KNEE_F` | 0.25 / 0.9 | tỉ lệ ống chân bị nước phủ: bậc 1 / bậc 3 |
 | `INFER_FPS` / `SEGMENT_SECONDS` / `MIN_FRAME_FRAC` | 5 / 2 / 0.5 | tốc độ suy luận, độ dài đoạn, tỉ lệ khung đạt mức |
@@ -95,20 +106,23 @@ Cải thiện so với v1 là rất nhỏ (+0.003); v2 đơn giản hơn (1 clas
 
 Trên crop xe máy/xe đạp/bus/tải tự gán (153): đúng bậc 0.529 → 0.575, đoán thấp 0.353 → 0.281. Trên STURM (366): đúng bậc 0.705 → 0.675.
 
-**Test video VN** (51 đoạn 2 giây trong 5 clip, nhãn tay theo contact sheet; xem `training/v2/vn_test_labels.csv`). Hàng = nhãn, cột = dự đoán:
+**Test video VN** (51 đoạn 2 giây trong 5 clip, nhãn tay theo contact sheet; `training/v2/vn_test_labels.csv`):
 
-| | đúng mức | sai ≤ 1 | ma trận nhầm |
-|---|---|---|---|
-| hệ thống cũ (v1) | 0.412 | 0.98 | `[[3,1,1,0],[0,0,27,0],[0,0,18,0],[0,0,1,0]]` |
-| **v2** | **0.333** | 0.98 | `[[3,2,0,0],[0,0,26,1],[0,4,14,0],[0,0,1,0]]` |
+| | đúng mức | lệch ≤ 1 | báo thiếu | báo dư |
+|---|---|---|---|---|
+| v1 | 0.412 | 0.980 | 0.020 | 0.569 |
+| v2 (độ phủ ≥ 30% → mức 2) | 0.333 | 0.980 | 0.098 | 0.569 |
+| **v2 (độ phủ tối đa mức 1)** | **0.490** | 0.961 | 0.373 | 0.137 |
 
-v2 **không tốt hơn** v1 trên tập này về số đoạn đúng. Lỗi chính của cả hai: gần như mọi đoạn nhãn 1 bị báo 2 vì độ phủ nước/mặt đất thường 60–100% (đường ngập kín) → luật độ phủ ≥ 30% đẩy lên bậc 2. Thử tắt luật độ phủ cho đúng mức 0.49 nhưng toàn bộ 18 đoạn nhãn 2 bị báo 1 (đoán thấp), nên giữ luật. Độ phủ không phân biệt được bậc 1 và 2 trong tập này. Cỡ mẫu nhỏ (một mức nhãn 3 duy nhất), không nên suy ra nhiều hơn.
+Ma trận nhầm của v2 hiện tại (hàng = nhãn, cột = dự đoán): `[[3,2,0,0],[0,22,4,1],[0,18,0,0],[0,1,0,0]]`.
+
+Đúng mức tăng và báo dư giảm mạnh, nhưng **báo thiếu tăng từ 0.02 lên 0.37**: 18/18 đoạn nhãn 2 bị báo 1 (nước phủ rộng không vật tham chiếu, hoặc người/xe chỉ được nhận ở bậc 1). Đổi lấy ít báo dư thì mất độ an toàn; hệ thống không còn mức 2 nếu không có vật tham chiếu. Tập nhỏ (chỉ một đoạn nhãn 3).
 
 **Tốc độ** (RTX 3050 Laptop 4 GB, khung 1 clip, không tính SegFormer mặt đất chạy ~1 lần/giây): GPU **29 ms/lần suy luận** (VRAM cấp phát tối đa ~200 MB, chưa tính SegFormer-b2 và CUDA context), CPU **221 ms/lần**. 5 lần/giây video thì CPU chậm hơn thời gian thực khoảng 1.1×.
 
 ## Hạn chế
 
-- Độ phủ không phân biệt bậc 1 và 2; khi không có vật tham chiếu hợp lệ, mức chỉ dựa vào độ phủ và dễ báo quá (xem bảng nhầm ở trên).
+- Độ phủ một mình tối đa mức 1: cảnh nước phủ rộng không có người/xe được báo Chú ý dù có thể sâu hơn (báo thiếu 0.37 trên test VN).
 - Mức 3 hiếm: cần người tới gối hoặc xe ngập hết bánh được nhận ra; xe ngập gần hết có thể không được detect.
 - Luật người phụ thuộc chất lượng mask nước và keypoint; mask nước kém (phản chiếu, tán cây) làm lệch mép nước.
 - `depth_cls` trên crop video VN chỉ đúng ~55%, thiên về đoán bậc 1 cho nhãn 2; nhãn tay theo contact sheet, không đo thực tế.

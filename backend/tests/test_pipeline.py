@@ -106,15 +106,24 @@ class DecisionTest(unittest.TestCase):
         self.assertEqual((lv, ev), (0, P.NO_WATER_EVIDENCE))
 
     def test_level3_only_with_level3_object(self):
-        self.assertEqual(self.decide(1.0)[0], 2)   # độ phủ kín nhưng không có vật: chỉ 2
+        self.assertEqual(self.decide(1.0)[0], 1)   # độ phủ kín nhưng không có vật: tối đa 1
         self.assertEqual(self.decide(0.2, [obj("person", 3)])[0], 3)
         self.assertEqual(self.decide(0.2, [obj("vehicle", 2, cls="car")])[0], 2)
 
     def test_coverage_ratio_uses_ground(self):
-        lv, ev, st = self.decide(0.2, ground=self.ground(0.6))
+        lv, ev, st = self.decide(0.3, ground=self.ground(0.5))
         self.assertEqual(st["ratio_base"], "ground")
-        self.assertEqual(lv, 2 if st["flood_ratio"] >= P.COVER_LEVEL2 else 1)
-        self.assertEqual(ev, P.NO_REF_EVIDENCE)
+        self.assertGreaterEqual(st["flood_ratio"], P.COVER_WIDE)
+        self.assertEqual(lv, 1)
+        self.assertEqual(ev, P.WIDE_WATER_EVIDENCE)
+        lv, ev, _ = self.decide(0.06, ground=self.ground(0.9))   # nước ít so với mặt đất
+        self.assertEqual((lv, ev), (1, P.NO_REF_EVIDENCE))
+
+    def test_shallow_reference_keeps_level_one_despite_high_coverage(self):
+        for o in (obj("person", 1), obj("vehicle", 1, cls="motorcycle")):
+            lv, ev, _ = self.decide(1.0, [o])
+            self.assertEqual(lv, 1)
+            self.assertEqual(ev, P.object_text(o))
 
     def test_ground_fallback_when_small(self):
         _, _, st = self.decide(0.03, ground=self.ground(0.01))   # nước + mặt đất < 5% khung hình
