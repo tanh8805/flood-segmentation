@@ -21,6 +21,7 @@ USE_POSE = _flag("USE_POSE")
 USE_DETECT = _flag("USE_DETECT")
 USE_DEPTH_CLS = _flag("USE_DEPTH_CLS")
 USE_GROUND = _flag("USE_GROUND")
+USE_WATER_VETO = _flag("USE_WATER_VETO")   # xoá nước trên sky/building/house/tree/wall/ceiling/signboard (SegFormer)
 
 _default_water = WEIGHTS / "water.pt" if (WEIGHTS / "water.pt").exists() else WEIGHTS / "best.pt"  # best.pt: model cũ, dự phòng
 WATER_MODEL_PATH = os.getenv("WATER_MODEL_PATH", str(_default_water))
@@ -37,7 +38,6 @@ KP_HIGH = float(os.getenv("KP_HIGH", "0.7"))                   # mắt cá conf 
 DEPTH_UP_P = float(os.getenv("DEPTH_UP_P", "0.35"))            # depth_cls: xác suất bậc cao hơn >= ngưỡng này thì chọn bậc cao (thiên về an toàn)
 WATER_MIN_FRAME_FRAC = float(os.getenv("WATER_MIN_FRAME_FRAC", "0.005"))  # nước < 0.5% khung hình: coi như không có
 WATER_MIN_RATIO = float(os.getenv("WATER_MIN_RATIO", "0.05"))  # độ phủ nước/mặt đất tối thiểu để tính là "có nước"
-COVER_WIDE = float(os.getenv("COVER_WIDE", "0.30"))        # độ phủ >= 30%: chỉ đổi evidence ("nước phủ rộng"), mức vẫn tối đa 1
 GROUND_MIN_FRAC = float(os.getenv("GROUND_MIN_FRAC", "0.05"))  # mặt đất < 5% khung hình -> logic dự phòng
 FLOOD_COVER_MIN_FRAC = float(os.getenv("FLOOD_COVER_MIN_FRAC", "0.10"))  # dự phòng: nước >= 10% khung hình -> mặt đường bị phủ kín
 OBJ_CONF_2W = float(os.getenv("OBJ_CONF_2W", str(OBJ_CONF)))   # conf riêng cho xe máy / xe đạp (cảnh tối, nhìn từ trên xuống thường conf thấp)
@@ -50,6 +50,8 @@ USE_DEPTH_MEMORY = _flag("USE_DEPTH_MEMORY", "0")
 DEPTH_MEMORY_S = float(os.getenv("DEPTH_MEMORY_S", "10"))      # nhớ bằng chứng độ sâu của vật tin cậy tối đa bấy nhiêu giây (cùng cảnh, nước còn)
 MEMORY_WATER_KEEP = float(os.getenv("MEMORY_WATER_KEEP", "0.5"))  # nước phủ khung < tỉ lệ này so với lúc đo thì bỏ ngay bằng chứng đã nhớ
 MEMORY_MIN_STEPS = int(os.getenv("MEMORY_MIN_STEPS", "1"))     # bậc b phải được đo ở >= số lần suy luận liên tiếp này mới được nhớ
+DEPTH_MIN_FRAC = float(os.getenv("DEPTH_MIN_FRAC", "0.08"))    # xe: box cao < tỉ lệ này của chiều cao khung thì vẽ box nhưng không đọc độ sâu
+PERSON_READ_MIN_FRAC = float(os.getenv("PERSON_READ_MIN_FRAC", "0.12"))  # người: chỉ đọc độ sâu khi box cao >= tỉ lệ này của khung
 PERSON_MIN_H = int(os.getenv("PERSON_MIN_H", "60"))
 VEHICLE_MIN_H = int(os.getenv("VEHICLE_MIN_H", "40"))
 CONTACT_MIN_FRAC = float(os.getenv("CONTACT_MIN_FRAC", "0.03"))  # nước chiếm >= 3% phần dưới box xe mới đưa vào depth_cls
@@ -64,8 +66,9 @@ VEHICLE_TAG = {"bicycle": "xe dap", "motorcycle": "xe may", "car": "oto", "bus":
 VEHICLE_DEPTH_TEXT = {1: "dưới nửa bánh", 2: "quá nửa bánh", 3: "hết bánh"}
 PERSON_DEPTH_TEXT = {1: "tới mắt cá", 2: "tới giữa ống chân", 3: "tới gối"}
 GROUND_LABELS = ("road", "sidewalk", "path", "earth", "floor")
-NO_REF_EVIDENCE = "Không có vật tham chiếu, chỉ dựa vào độ phủ"
-WIDE_WATER_EVIDENCE = "Nước phủ rộng, không có vật tham chiếu để ước lượng độ sâu"
+VETO_LABELS = ("sky", "building", "house", "tree", "wall", "ceiling", "signboard")   # nước không thể nằm trên các lớp này
+def no_ref_evidence(ratio):
+    return f"Nước phủ {ratio:.0%} mặt đường, không ước lượng được độ sâu (không có vật tham chiếu đủ gần)"
 NO_WATER_EVIDENCE = "Không có nước đáng kể"
 
 
@@ -196,7 +199,7 @@ def frame_decision(water, ground, objects, h, w):
         ratio, base = 1.0, "covered"   # logic dự phòng: không thấy mặt đất mà nước nhiều -> đã phủ kín
     else:
         ratio, base = frac, "frame"
-    valid = [o for o in objects if is_valid(o)] if frac >= WATER_MIN_FRAME_FRAC else []
+    valid = [o for o in objects if is_valid(o) and o.get("read", True)] if frac >= WATER_MIN_FRAME_FRAC else []   # chỉ vật đọc được
     top = max(valid, key=lambda o: o["level"], default=None)
     obj_lv = top["level"] if top else 0
     has_water = frac >= WATER_MIN_FRAME_FRAC and ratio >= WATER_MIN_RATIO
@@ -213,12 +216,8 @@ def frame_decision(water, ground, objects, h, w):
         evidence = object_text(top)
         if top.get("age") is not None:
             evidence += f" (đo {top['age']:.0f} giây trước, cùng cảnh)"
-    elif valid:
-        evidence = f"Vật tham chiếu chỉ ngập nông, độ phủ nước {ratio:.0%}"
-    elif ratio >= COVER_WIDE:
-        evidence = WIDE_WATER_EVIDENCE
     else:
-        evidence = NO_REF_EVIDENCE
+        evidence = no_ref_evidence(ratio)
     vehicles = [o["level"] for o in valid if o["kind"] == "vehicle"]
     return level, evidence, {
         "flood_ratio": round(ratio, 3), "ratio_base": base, "objects": len(valid),
@@ -311,7 +310,7 @@ class DepthMemory:
             self.entries, self.streak, self.scene = {}, {}, scene
         self.entries = {k: e for k, e in self.entries.items()
                         if t - e["t"] <= self.seconds and water_frac >= self.keep * e["frac"] and water_frac > 0}
-        valid = [o for o in objects if is_valid(o)]
+        valid = [o for o in objects if is_valid(o) and o.get("read", True)]
         seen = set()
         for o in sorted(valid, key=lambda o: o["level"]):
             if o["level"] < 2:
@@ -336,15 +335,15 @@ class GroundCache:
     """Mặt đất chạy ~1 lần/giây hoặc khi chuyển cảnh; giữa các lần dùng lại mask cũ."""
 
     def __init__(self, pipe, every):
-        self.pipe, self.every, self.mask, self.n = pipe, max(1, every), None, 0
+        self.pipe, self.every, self.mask, self.veto, self.n = pipe, max(1, every), None, None, 0
 
     def update(self, frame, cut=False):
         if self.pipe.ground is None:
             return None
         if cut:
-            self.mask, self.n = None, 0
+            self.mask, self.veto, self.n = None, None, 0
         if self.mask is None or self.n % self.every == 0:
-            self.mask = self.pipe.ground_mask(frame)
+            self.mask, self.veto = self.pipe.scene_masks(frame)
         self.n += 1
         return self.mask
 
@@ -387,7 +386,9 @@ class FloodPipeline:
             model = (model.half() if dev == "cuda" else model).to(dev)
             names = {int(i): str(n).split(",")[0].strip().lower() for i, n in model.config.id2label.items()}
             ids = [i for i, n in names.items() if n in GROUND_LABELS]
-            self._ground_dev, self._ground_ids = dev, torch.tensor(ids, device=dev)
+            veto = [i for i, n in names.items() if n in VETO_LABELS]
+            self._ground_dev = dev
+            self._ground_ids, self._veto_ids = torch.tensor(ids, device=dev), torch.tensor(veto, device=dev)
             return model
         except Exception as e:  # không tải được SegFormer: chạy tiếp bằng logic dự phòng
             log(f"không nạp được mặt đất ({type(e).__name__}) -> tắt")
@@ -411,7 +412,8 @@ class FloodPipeline:
                 out |= m
         return out
 
-    def ground_mask(self, frame):
+    def scene_masks(self, frame):
+        """SegFormer -> (mặt đất, vùng cấm nước: sky/building/house/tree/wall/ceiling/signboard)."""
         import torch
         h, w = frame.shape[:2]
         sh = max(32, round(h * 512 / w / 32) * 32)
@@ -421,7 +423,7 @@ class FloodPipeline:
         with torch.no_grad():
             logits = self.ground(pixel_values=t.half() if self._ground_dev == "cuda" else t.float()).logits
             lab = torch.nn.functional.interpolate(logits.float(), size=(h, w), mode="bilinear", align_corners=False).argmax(1)[0]
-            return torch.isin(lab, self._ground_ids).cpu().numpy()
+            return torch.isin(lab, self._ground_ids).cpu().numpy(), torch.isin(lab, self._veto_ids).cpu().numpy()
 
     def persons(self, frame, water, det_frame=None):
         if self.pose is None:
@@ -433,6 +435,9 @@ class FloodPipeline:
         for box, conf, kxy, kc in zip(r.boxes.xyxy.cpu().numpy(), r.boxes.conf.cpu().numpy(),
                                       r.keypoints.xy.cpu().numpy(), r.keypoints.conf.cpu().numpy()):
             if box[3] - box[1] < PERSON_MIN_H:
+                continue
+            if box[3] - box[1] < PERSON_READ_MIN_FRAC * frame.shape[0]:   # nhỏ/xa: vẽ box, không đọc
+                out.append({"kind": "person", "cls": "person", "box": box.astype(int), "conf": float(conf), "level": 0, "read": False})
                 continue
             lv = person_depth(kxy, kc, box, water)
             if lv is not None:
@@ -457,6 +462,9 @@ class FloodPipeline:
             x1, y1, x2, y2 = v["box"]
             if y2 - y1 < VEHICLE_MIN_H:
                 continue
+            if y2 - y1 < DEPTH_MIN_FRAC * h:   # quá nhỏ/xa: vẽ box, không đọc độ sâu
+                v["read"] = False
+                continue
             low = water[max(0, y1 + int(0.75 * (y2 - y1))):min(h, y2 + 1), max(0, x1):min(w, x2)]
             if low.size and low.mean() >= CONTACT_MIN_FRAC:  # đáy xe không chạm nước: bậc 0, khỏi chạy depth_cls
                 v["level"] = 1
@@ -471,14 +479,18 @@ class FloodPipeline:
                 p = res.probs.data.cpu().numpy()
                 order = sorted(range(len(p)), key=lambda i: int(str(res.names[i])[-1]))  # xác suất theo thứ tự bậc 0..3
                 v["level"] = pick_depth(p[order])
+                if v["level"] == 0:   # đáy box chạm nước mà đọc bậc 0: mâu thuẫn, bỏ kết quả đọc
+                    v["read"] = False
         return cand, two
 
-    def infer(self, frame):
+    def infer(self, frame, veto=None):
         """Khung hình -> (mask nước thô, danh sách vật tham chiếu). Không có nước: bỏ qua pose/detect/cls."""
         det_frame = brighten(frame)
         if DARK_SCOPE == "all":
             frame = det_frame
         water = self.water_mask(frame)
+        if veto is not None and USE_WATER_VETO:
+            water &= ~veto
         if water.mean() < WATER_MIN_FRAME_FRAC:
             return water, []
         cars, two = self.vehicles(frame, water, det_frame)

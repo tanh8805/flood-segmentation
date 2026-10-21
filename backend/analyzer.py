@@ -41,6 +41,7 @@ NO_REF_NOTE = "không có vật tham chiếu để ước lượng độ sâu"
 # Màu vẽ (BGR)
 CLASS_COLORS = {"water": (230, 120, 20), "person": (80, 200, 80), "vehicle": (0, 215, 255)}
 LEVEL_COLORS = {0: (80, 200, 80), 1: (60, 220, 200), 2: (0, 150, 255), 3: (40, 40, 230)}
+UNREAD_COLOR = (150, 150, 150)   # vật quá nhỏ/xa hoặc đọc mâu thuẫn: vẽ box, không đọc độ sâu
 
 _pipe = None
 _lock = threading.Lock()
@@ -156,11 +157,12 @@ def build_overlay(water, objects, h, w):
     for o in objects:
         if not P.is_valid(o):
             continue
-        col = LEVEL_COLORS[o["level"]]
+        read = o.get("read", True)
+        col = LEVEL_COLORS[o["level"]] if read else UNREAD_COLOR
         x1, y1, x2, y2 = (int(v) for v in o["box"])
         tag = "nguoi" if o["kind"] == "person" else P.VEHICLE_TAG[o["cls"]]
         ov["boxes"].append(((x1, y1, x2, y2), col))
-        ov["labels"].append((f"{tag} B{o['level']}", (x1, y1), col))
+        ov["labels"].append((f"{tag} B{o['level']}" if read else f"{tag} ?", (x1, y1), col))
     return ov
 
 
@@ -297,9 +299,10 @@ def process_video(video_path, out_path, progress=None):
                             emit(prev)
                         smoother, tracker = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker()
                         scene += 1
-                    water_raw, objs = pipe.infer(frame)
+                    ground.update(frame, cut)
+                    water_raw, objs = pipe.infer(frame, veto=ground.veto)
                     water, objs = smoother.update(water_raw), tracker.update(objs)
-                    gmask = ground.update(frame, cut) if water.any() else None
+                    gmask = ground.mask if water.any() else None
                     remembered = memory.update(idx / fps, scene, objs, float(water.mean())) if P.USE_DEPTH_MEMORY else []
                     _, _, st = P.frame_decision(water, gmask, objs + remembered, h, w)
                     stats = {"time_s": round(idx / fps, 2), "scene": scene, **st}

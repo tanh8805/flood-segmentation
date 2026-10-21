@@ -27,13 +27,12 @@ Bậc độ sâu 0–3: 0 không chạm nước · 1 mắt cá / dưới nửa b
 | Mức | Điều kiện | Căn cứ (`evidence`) |
 |---|---|---|
 | 0 | không có nước đáng kể (nước < 0.5% khung hoặc độ phủ < 5%) và không có vật bậc ≥ 1 | "Không có nước đáng kể" |
-| 1 | có nước, hoặc vật bậc 1; vật tham chiếu chạm nước mà tất cả bậc ≤ 1 vẫn là mức 1 dù độ phủ cao | tên vật ("Người lội nước tới mắt cá") hoặc "Vật tham chiếu chỉ ngập nông, độ phủ nước …" |
-| 1 | không có vật tham chiếu, độ phủ ≥ 30% | "Nước phủ rộng, không có vật tham chiếu để ước lượng độ sâu" |
-| 1 | không có vật tham chiếu, độ phủ < 30% | "Không có vật tham chiếu, chỉ dựa vào độ phủ" |
+| 1 | có nước, hoặc vật đọc được bậc 1 | tên vật ("Người lội nước tới mắt cá") |
+| 1 | không có vật nào đọc được (không vật, vật quá nhỏ/xa, hoặc đọc mâu thuẫn) | "Nước phủ X% mặt đường, không ước lượng được độ sâu (không có vật tham chiếu đủ gần)" |
 | 2 | có vật bậc 2 | "Người lội nước tới giữa ống chân", "Xe máy ngập quá nửa bánh"… |
 | 3 | **chỉ** khi có vật bậc 3 | "Người lội nước tới gối", "Ô tô ngập hết bánh"… |
 
-Vật hợp lệ: người cao ≥ 60 px, xe cao ≥ 40 px, giữ bậc ≥ 2 lần suy luận liên tiếp. Khung không có nước thì bỏ qua pose/detect/cls. Mặt đất < 5% khung → logic dự phòng (nước ≥ 10% khung coi là phủ kín).
+Vật hợp lệ: người cao ≥ 60 px, xe cao ≥ 40 px, giữ bậc ≥ 2 lần suy luận liên tiếp. **Vật đọc được tin cậy** (chỉ loại này tính vào mức và căn cứ; vật còn lại vẫn được vẽ box, nhãn `?`): xe cao ≥ 8% chiều cao khung (`DEPTH_MIN_FRAC`); người cao ≥ 12% khung (`PERSON_READ_MIN_FRAC`) và có gối hoặc hông tin cậy; xe có đáy box chạm nước mà `depth_cls` đọc bậc 0 là mâu thuẫn nên bỏ kết quả đọc. **Mask nước** bị xoá trên các lớp SegFormer sky, building, house, tree, wall, ceiling, signboard (`USE_WATER_VETO`). Khung không có nước thì bỏ qua pose/detect/cls. Mặt đất < 5% khung → logic dự phòng (nước ≥ 10% khung coi là phủ kín).
 
 **Theo thời gian**: 5 lần suy luận/giây, mask nước làm mượt có ngưỡng trễ, đoạn 2 giây (mức đoạn = mức cao nhất mà ≥ 50% khung hình đạt), phát hiện chuyển cảnh bằng histogram màu, mặt đất chạy ~1 lần/giây hoặc khi chuyển cảnh. Các đoạn liền nhau cùng mức gộp thành giai đoạn; mức cả video là mức cao nhất.
 
@@ -77,7 +76,8 @@ Bật/tắt từng phần bằng biến môi trường `USE_POSE`, `USE_DETECT`,
 | `OBJ_CONF_2W` / `DARK_LUM` / `DARK_SCOPE` / `DETECT_IMGSZ` | = `OBJ_CONF` / 0 / `det` / 0 | tuỳ chọn thử cho cảnh tối (tắt mặc định): conf riêng xe máy/xe đạp; CLAHE khi độ sáng xám < ngưỡng (`det`: chỉ detect/pose, `all`: cả mask nước và crop depth_cls); imgsz detect |
 | `USE_DEPTH_MEMORY` / `DEPTH_MEMORY_S` / `MEMORY_WATER_KEEP` / `MEMORY_MIN_STEPS` | 0 / 10 / 0.5 / 1 | tuỳ chọn thử, **tắt mặc định, chưa có số liệu ủng hộ**: nhớ bậc ≥ 2 của vật tin cậy tối đa 10 giây khi cùng cảnh và nước còn (evidence ghi "đo X giây trước"); trên test VN nó làm báo dư tăng 0.08 → 0.35 |
 | `DETECT_LOW_CONF` / `TRACK_CONFIRM_STEPS` | 0.15 / 3 | xe conf trong [0.15, ngưỡng) chỉ nhận khi cùng track thấy ≥ 3 lần suy luận liên tiếp (0 = tắt); không đổi kết quả test VN |
-| `COVER_WIDE` | 0.30 | độ phủ nước/mặt đất từ mức này thì căn cứ ghi "Nước phủ rộng" (mức vẫn tối đa 1) |
+| `USE_WATER_VETO` | 1 | xoá nước trên sky/building/house/tree/wall/ceiling/signboard (cần SegFormer) |
+| `DEPTH_MIN_FRAC` / `PERSON_READ_MIN_FRAC` | 0.08 / 0.12 | chiều cao box tối thiểu (theo khung) để đọc độ sâu xe / người |
 | `DEPTH_UP_P` | 0.35 | chọn bậc cao hơn của depth_cls nếu xác suất ≥ giá trị này |
 | `SHALLOW_F` / `KNEE_F` | 0.25 / 0.9 | tỉ lệ ống chân bị nước phủ: bậc 1 / bậc 3 |
 | `INFER_FPS` / `SEGMENT_SECONDS` / `MIN_FRAME_FRAC` | 5 / 2 / 0.5 | tốc độ suy luận, độ dài đoạn, tỉ lệ khung đạt mức |
@@ -109,19 +109,22 @@ Cải thiện so với v1 là rất nhỏ (+0.003); v2 đơn giản hơn (1 clas
 
 Trên crop xe máy/xe đạp/bus/tải tự gán (153): đúng bậc 0.529 → 0.575, đoán thấp 0.353 → 0.281. Trên STURM (366): đúng bậc 0.705 → 0.675.
 
-**Test video VN** (51 đoạn 2 giây trong 5 clip; nhãn tay theo contact sheet, đã được người duyệt lại clip2 và clip5; `training/v2/vn_test_labels.csv`):
+**Mask nước và veto SegFormer** (IoU test_flood, conf 0.25 như lúc train): 0.8195 → **0.8158** khi xoá nước trên sky/building/house/tree/wall/ceiling/signboard (deepflood 0.860 → 0.856, pixabay 0.699 → 0.695); 3 ảnh giảm > 0.05, 3 ảnh tăng > 0.05; 2.8% diện tích nước thật nằm trên các lớp bị xoá. Đổi lại, video đêm tuoitre_dem ở ~1:23 hết tràn lên mặt tiền và vòm cây (nước trên khung hình giảm 0.90 → 0.75). Ảnh tối (độ sáng xám TB < 70) chỉ chiếm 4.1% train (53/1308), 2.2% val, 2.5% test (4 ảnh, IoU 0.679 → 0.680): model chưa được train đủ ảnh đêm, chưa train lại.
+
+**Test video VN** (51 đoạn 2 giây trong clip0, 1, 2, 5 và tuoitre_dem [66–98 s]; clip6 đã bị mất khỏi máy nên không còn trong bảng này). Nhãn tay theo contact sheet; clip2 và clip5 đã được người duyệt, các đoạn tuoitre_dem **mới gán, chưa duyệt** (cả 16 đoạn nhãn 2 theo toàn cảnh "đường ngập như sông", không có vật tham chiếu đo được ở phần lớn đoạn). `training/v2/vn_test_labels.csv`:
 
 | | đúng mức | lệch ≤ 1 | báo thiếu | báo dư |
 |---|---|---|---|---|
-| v1 | 0.294 | 0.980 | 0.078 | 0.627 |
-| v2 (độ phủ ≥ 30% → mức 2) | 0.255 | 0.980 | 0.137 | 0.608 |
-| **v2 (độ phủ tối đa mức 1)** | **0.647** | 0.922 | 0.275 | 0.078 |
+| v1 | 0.608 | 0.980 | 0.078 | 0.314 |
+| v2 đã push | 0.412 | 0.941 | 0.569 | 0.020 |
+| **v2 + đọc tin cậy + veto nước** | 0.412 | 0.941 | 0.588 | 0.000 |
+| v2 + đọc tin cậy + veto + nhớ bật | 0.373 | 0.843 | 0.431 | 0.196 |
 
-Ma trận nhầm của v2 hiện tại (hàng = nhãn, cột = dự đoán): `[[3,0,0,0],[0,29,3,1],[0,11,1,0],[0,3,0,0]]`.
+Chỉ trên clip0, 1, 2, 5 (35 đoạn, nhãn đã duyệt): v1 0.429 đúng / thiếu 0.114 / dư 0.457; v2 0.600 / 0.400 / 0.000; v2 + nhớ 0.486 / 0.371 / 0.143. Ma trận nhầm v2 hiện tại (hàng = nhãn, cột = dự đoán, 51 đoạn): `[[3,0,0,0],[0,17,0,0],[0,27,1,0],[0,3,0,0]]`.
 
-Đúng mức tăng và báo dư giảm mạnh, nhưng báo thiếu tăng (0.08 → 0.28): 11/12 đoạn nhãn 2 và cả 3 đoạn nhãn 3 bị báo 1. 10/14 đoạn báo thiếu nằm ở clip2 (gara ngập, tối, nhìn từ trên xuống): phần lớn đoạn không có vật tham chiếu nào trong khung, nên mức chỉ dựa vào độ phủ và tối đa là 1. Ở các đoạn có xe máy, model chỉ nhận với conf thấp (0.1–0.3 so với ngưỡng 0.35) và `depth_cls` cho "dưới nửa bánh" do ảnh quá tối.
+Việc sửa đọc tin cậy làm đúng căn cứ (không còn "vật tham chiếu chỉ ngập nông" khi vật quá nhỏ) nhưng không thêm mức cao: khi không có vật đọc được, mức tối đa là 1, nên báo thiếu cao (27/28 đoạn nhãn 2 bị báo 1). Bật nhớ giảm báo thiếu nhưng báo dư tăng lên 0.14–0.20, ngay cả khi đọc đã chặt hơn. Báo dư của v1 chủ yếu là luật "độ phủ ≥ 30% → mức 2" (nay đã bỏ).
 
-Đã thử (đo trên cả 5 clip): tăng sáng CLAHE khi khung tối (`DARK_LUM`, `DARK_SCOPE`), conf riêng cho xe máy/xe đạp 0.15–0.2 (`OBJ_CONF_2W`), detect imgsz 960 (`DETECT_IMGSZ`, +6 ms). Không cách nào sửa được clip2 (đúng mức 1/11 trước và sau); chỉ có imgsz 960 làm các clip khác thêm 1 đoạn đúng, quá ít để kết luận. Vì vậy các tuỳ chọn này **tắt mặc định**. Tập nhỏ (3 đoạn nhãn 3).
+Đã thử (đo trên clip0, 1, 2, 5, 6 trước khi clip6 bị mất): tăng sáng CLAHE khi khung tối (`DARK_LUM`, `DARK_SCOPE`), conf riêng cho xe máy/xe đạp 0.15–0.2 (`OBJ_CONF_2W`), detect imgsz 960 (`DETECT_IMGSZ`, +6 ms). Không cách nào sửa được clip2 (đúng mức 1/11 trước và sau); chỉ có imgsz 960 làm các clip khác thêm 1 đoạn đúng, quá ít để kết luận. Vì vậy các tuỳ chọn này **tắt mặc định**. Tập nhỏ (3 đoạn nhãn 3).
 
 **Tốc độ** (RTX 3050 Laptop 4 GB, khung 1 clip, không tính SegFormer mặt đất chạy ~1 lần/giây): GPU **29 ms/lần suy luận** (VRAM cấp phát tối đa ~200 MB, chưa tính SegFormer-b2 và CUDA context), CPU **221 ms/lần**. 5 lần/giây video thì CPU chậm hơn thời gian thực khoảng 1.1×.
 

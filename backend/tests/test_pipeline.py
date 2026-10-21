@@ -113,11 +113,20 @@ class DecisionTest(unittest.TestCase):
     def test_coverage_ratio_uses_ground(self):
         lv, ev, st = self.decide(0.3, ground=self.ground(0.5))
         self.assertEqual(st["ratio_base"], "ground")
-        self.assertGreaterEqual(st["flood_ratio"], P.COVER_WIDE)
         self.assertEqual(lv, 1)
-        self.assertEqual(ev, P.WIDE_WATER_EVIDENCE)
-        lv, ev, _ = self.decide(0.06, ground=self.ground(0.9))   # nước ít so với mặt đất
-        self.assertEqual((lv, ev), (1, P.NO_REF_EVIDENCE))
+        self.assertEqual(ev, P.no_ref_evidence(st["flood_ratio"]))
+        self.assertIn("không ước lượng được độ sâu (không có vật tham chiếu đủ gần)", ev)
+
+    def test_unreadable_objects_do_not_count_or_justify_shallow(self):
+        small = {**obj("vehicle", 0, cls="car"), "read": False}
+        lv, ev, st = self.decide(1.0, [small])
+        self.assertEqual(lv, 1)
+        self.assertTrue(ev.startswith("Nước phủ") and "không ước lượng được độ sâu" in ev)
+        self.assertNotIn("nông", ev)
+        self.assertIsNone(st["max_object_level"])
+        self.assertEqual(st["objects"], 0)
+        unread_high = {**obj("person", 3), "read": False}   # bậc đọc không tin cậy không được nâng mức
+        self.assertEqual(self.decide(0.2, [unread_high])[0], 1)
 
     def test_shallow_reference_keeps_level_one_despite_high_coverage(self):
         for o in (obj("person", 1), obj("vehicle", 1, cls="motorcycle")):
@@ -251,9 +260,9 @@ class GroundCacheTest(unittest.TestCase):
             ground = True
             calls = 0
 
-            def ground_mask(self, f):
+            def scene_masks(self, f):
                 self.calls += 1
-                return np.ones((4, 4), bool)
+                return np.ones((4, 4), bool), np.zeros((4, 4), bool)
         f = Fake()
         c = P.GroundCache(f, every=5)
         for _ in range(10):
@@ -261,8 +270,85 @@ class GroundCacheTest(unittest.TestCase):
         self.assertEqual(f.calls, 2)
         c.update(None, cut=True)
         self.assertEqual(f.calls, 3)
+        self.assertEqual(c.veto.shape, (4, 4))
         f.ground = None
         self.assertIsNone(c.update(None))
+
+
+class _T:
+    def __init__(self, a):
+        self.a = np.asarray(a)
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        return self.a
+
+
+class _Det:
+    def __init__(self, boxes, confs, cls):
+        self.boxes = type("B", (), {"xyxy": _T(boxes), "conf": _T(confs), "cls": _T(cls)})()
+
+    def predict(self, *a, **k):
+        return [self]
+
+
+class _Depth:
+    def __init__(self, probs):
+        self.probs = probs
+
+    def predict(self, crops, **k):
+        return [type("R", (), {"names": {0: "d0", 1: "d1", 2: "d2", 3: "d3"}, "probs": type("P", (), {"data": _T(self.probs)})()})() for _ in crops]
+
+
+class ReadingRulesTest(unittest.TestCase):
+    FH, FW = 800, 800
+
+    def pipe(self, boxes, depth_probs):
+        p = P.FloodPipeline.__new__(P.FloodPipeline)
+        p.device, p.pose, p.water, p.ground = "cpu", None, None, None
+        p.detect = _Det(boxes, [0.9] * len(boxes), [2] * len(boxes))
+        p.depth = _Depth(depth_probs)
+        return p
+
+    def run_vehicles(self, box, probs):
+        frame = np.zeros((self.FH, self.FW, 3), np.uint8)
+        water = np.ones((self.FH, self.FW), bool)
+        cars, _ = self.pipe([box], probs).vehicles(frame, water)
+        return cars[0]
+
+    def test_small_vehicle_is_drawn_but_not_read(self):
+        c = self.run_vehicles([10, 100, 90, 100 + int(P.DEPTH_MIN_FRAC * self.FH) - 3], [0.0, 0.0, 0.0, 1.0])
+        self.assertFalse(c["read"])
+        self.assertEqual(c["level"], 0)
+
+    def test_big_enough_vehicle_is_read(self):
+        c = self.run_vehicles([10, 100, 200, 100 + int(P.DEPTH_MIN_FRAC * self.FH) + 10], [0.0, 0.1, 0.1, 0.8])
+        self.assertEqual((c["level"], c.get("read", True)), (3, True))
+
+    def test_level0_with_base_in_water_is_contradiction(self):
+        c = self.run_vehicles([10, 100, 200, 250], [0.9, 0.05, 0.03, 0.02])
+        self.assertFalse(c["read"])
+
+    def test_dry_vehicle_level0_stays_readable(self):
+        frame = np.zeros((self.FH, self.FW, 3), np.uint8)
+        cars, _ = self.pipe([[10, 100, 200, 250]], [1, 0, 0, 0]).vehicles(frame, np.zeros((self.FH, self.FW), bool))
+        self.assertEqual((cars[0]["level"], cars[0].get("read", True)), (0, True))
+
+    def test_water_veto_removes_water_on_sky_and_buildings(self):
+        p = P.FloodPipeline.__new__(P.FloodPipeline)
+        p.pose = p.detect = p.depth = None
+        wm = np.zeros((20, 20), bool)
+        wm[:, :] = True
+        p.water_mask = lambda f: wm.copy()
+        veto = np.zeros((20, 20), bool)
+        veto[:10] = True
+        water, _ = p.infer(np.zeros((20, 20, 3), np.uint8), veto=veto)
+        self.assertEqual(int(water.sum()), 200)
+        self.assertFalse(water[:10].any())
+        water, _ = p.infer(np.zeros((20, 20, 3), np.uint8))   # không veto: giữ nguyên
+        self.assertTrue(water.all())
 
 
 class FlagTest(unittest.TestCase):
