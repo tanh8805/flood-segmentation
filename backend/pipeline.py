@@ -13,8 +13,8 @@ import numpy as np
 WEIGHTS = Path(__file__).parent / "weights"
 
 
-def _flag(name):
-    return os.getenv(name, "1").strip().lower() not in ("0", "false", "no", "off")
+def _flag(name, default="1"):
+    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
 
 
 USE_POSE = _flag("USE_POSE")
@@ -44,6 +44,12 @@ OBJ_CONF_2W = float(os.getenv("OBJ_CONF_2W", str(OBJ_CONF)))   # conf riêng cho
 DARK_LUM = float(os.getenv("DARK_LUM", "0"))                   # độ sáng xám trung bình < ngưỡng: CLAHE trước khi detect/pose (0 = tắt)
 DARK_SCOPE = os.getenv("DARK_SCOPE", "det")                    # "det": chỉ detect/pose dùng khung đã tăng sáng; "all": cả mask nước và crop depth_cls
 DETECT_IMGSZ = int(os.getenv("DETECT_IMGSZ", "0"))             # imgsz riêng cho detect (0 = IMG_SIZE)
+DETECT_LOW_CONF = float(os.getenv("DETECT_LOW_CONF", "0.15"))  # xe conf trong [giá trị này, ngưỡng) chỉ được nhận khi cùng track thấy >= TRACK_CONFIRM_STEPS lần liên tiếp (0 = tắt)
+TRACK_CONFIRM_STEPS = int(os.getenv("TRACK_CONFIRM_STEPS", "3"))
+USE_DEPTH_MEMORY = _flag("USE_DEPTH_MEMORY", "0")
+DEPTH_MEMORY_S = float(os.getenv("DEPTH_MEMORY_S", "10"))      # nhớ bằng chứng độ sâu của vật tin cậy tối đa bấy nhiêu giây (cùng cảnh, nước còn)
+MEMORY_WATER_KEEP = float(os.getenv("MEMORY_WATER_KEEP", "0.5"))  # nước phủ khung < tỉ lệ này so với lúc đo thì bỏ ngay bằng chứng đã nhớ
+MEMORY_MIN_STEPS = int(os.getenv("MEMORY_MIN_STEPS", "1"))     # bậc b phải được đo ở >= số lần suy luận liên tiếp này mới được nhớ
 PERSON_MIN_H = int(os.getenv("PERSON_MIN_H", "60"))
 VEHICLE_MIN_H = int(os.getenv("VEHICLE_MIN_H", "40"))
 CONTACT_MIN_FRAC = float(os.getenv("CONTACT_MIN_FRAC", "0.03"))  # nước chiếm >= 3% phần dưới box xe mới đưa vào depth_cls
@@ -205,6 +211,8 @@ def frame_decision(water, ground, objects, h, w):
         evidence = NO_WATER_EVIDENCE
     elif top and obj_lv == level:
         evidence = object_text(top)
+        if top.get("age") is not None:
+            evidence += f" (đo {top['age']:.0f} giây trước, cùng cảnh)"
     elif valid:
         evidence = f"Vật tham chiếu chỉ ngập nông, độ phủ nước {ratio:.0%}"
     elif ratio >= COVER_WIDE:
@@ -263,20 +271,65 @@ class ObjectTracker:
             if ti in t2o:
                 t["obj"], t["missed"] = objects[t2o[ti]], 0
                 t["levels"].append(t["obj"]["level"])
+                t["streak"] += 1
+                t["confirmed"] = t["confirmed"] or not t["obj"].get("weak") or t["streak"] >= TRACK_CONFIRM_STEPS
             else:
                 t["missed"] += 1
+                t["streak"] = 0
             if t["missed"] <= self.hold:
                 tracks.append(t)
         for oi, o in enumerate(objects):
             if oi not in o2t:
-                tracks.append({"obj": o, "missed": 0, "levels": deque([o["level"]], maxlen=self.steps)})
+                tracks.append({"obj": o, "missed": 0, "levels": deque([o["level"]], maxlen=self.steps), "streak": 1,
+                               "confirmed": not o.get("weak")})
         self.tracks = tracks
         out = []
         for t in tracks:
+            if not t["confirmed"]:   # vật conf thấp chưa đủ lần liên tiếp
+                continue
             lv = t["levels"]
             stable = min(lv) if len(lv) >= self.steps else min(lv[-1], 1)
             out.append({**t["obj"], "level": stable})
         return out
+
+
+class DepthMemory:
+    """Nhớ bằng chứng độ sâu: vật tham chiếu tin cậy (đã qua tracker) cho bậc b >= 2 thì bậc đó còn giá trị tối đa `seconds` giây,
+    CHỈ khi cùng cảnh và nước còn (nước phủ khung >= `keep` x lúc đo). Nước mất hoặc đổi cảnh: bỏ ngay. Đây là bằng chứng
+    đã đo (kèm `age` giây trước), không phải giữ mức cũ."""
+
+    def __init__(self, seconds=None, keep=None, min_steps=None):
+        self.min_steps = MEMORY_MIN_STEPS if min_steps is None else min_steps
+        self.streak = {}
+        self.seconds = DEPTH_MEMORY_S if seconds is None else seconds
+        self.keep = MEMORY_WATER_KEEP if keep is None else keep
+        self.entries, self.scene = {}, None
+
+    def update(self, t, scene, objects, water_frac):
+        """-> vật ảo (bậc đã nhớ, có `age`) để đưa thêm vào luật cảnh báo; chỉ khi chưa có vật hiện tại cùng bậc hoặc cao hơn."""
+        if scene != self.scene:
+            self.entries, self.streak, self.scene = {}, {}, scene
+        self.entries = {k: e for k, e in self.entries.items()
+                        if t - e["t"] <= self.seconds and water_frac >= self.keep * e["frac"] and water_frac > 0}
+        valid = [o for o in objects if is_valid(o)]
+        seen = set()
+        for o in sorted(valid, key=lambda o: o["level"]):
+            if o["level"] < 2:
+                continue
+            k = o["kind"]
+            if k not in seen:
+                self.streak[k], _ = self.streak.get(k, 0) + 1, seen.add(k)
+            e = self.entries.get(k)
+            if self.streak[k] >= self.min_steps and (e is None or o["level"] >= e["level"]):
+                self.entries[k] = {**o, "t": t, "frac": water_frac}
+        for k in list(self.streak):
+            if k not in seen:
+                self.streak[k] = 0
+        cur = max((o["level"] for o in valid), default=0)
+        best = max(self.entries.values(), key=lambda e: e["level"], default=None)
+        if best is None or best["level"] <= cur:
+            return []
+        return [{**{k: v for k, v in best.items() if k not in ("t", "frac")}, "age": t - best["t"]}]
 
 
 class GroundCache:
@@ -389,13 +442,15 @@ class FloodPipeline:
     def vehicles(self, frame, water, det_frame=None):
         if self.detect is None:
             return [], []
-        r = self.detect.predict(frame if det_frame is None else det_frame, conf=min(OBJ_CONF, OBJ_CONF_2W), imgsz=DETECT_IMGSZ or IMG_SIZE, classes=list(COCO_VEHICLES), verbose=False, device=self.device)[0]
+        r = self.detect.predict(frame if det_frame is None else det_frame, conf=min(OBJ_CONF, OBJ_CONF_2W, DETECT_LOW_CONF or 1.0), imgsz=DETECT_IMGSZ or IMG_SIZE, classes=list(COCO_VEHICLES), verbose=False, device=self.device)[0]
         cand = []
         for box, conf, c in zip(r.boxes.xyxy.cpu().numpy(), r.boxes.conf.cpu().numpy(), r.boxes.cls.cpu().numpy().astype(int)):
-            if conf < (OBJ_CONF_2W if COCO_VEHICLES[c] in TWO_WHEELERS else OBJ_CONF):
+            thr = OBJ_CONF_2W if COCO_VEHICLES[c] in TWO_WHEELERS else OBJ_CONF
+            if conf < (min(thr, DETECT_LOW_CONF) if DETECT_LOW_CONF else thr):
                 continue
-            cand.append({"kind": "vehicle", "cls": COCO_VEHICLES[c], "box": box.astype(int), "conf": float(conf), "level": 0})
-        two = [v["box"] for v in cand if v["cls"] in TWO_WHEELERS]
+            cand.append({"kind": "vehicle", "cls": COCO_VEHICLES[c], "box": box.astype(int), "conf": float(conf), "level": 0,
+                         "weak": bool(conf < thr)})   # weak: chỉ nhận khi tracker xác nhận
+        two = [v["box"] for v in cand if v["cls"] in TWO_WHEELERS and not v["weak"]]
         h, w = water.shape
         todo = []
         for v in cand:

@@ -173,6 +173,68 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual(sorted(o["kind"] for o in out), ["person", "vehicle"])
 
 
+class WeakTrackTest(unittest.TestCase):
+    def weak(self):
+        return {**obj("vehicle", 2, cls="motorcycle"), "conf": 0.2, "weak": True}
+
+    def test_weak_detection_needs_three_consecutive_steps(self):
+        tr = P.ObjectTracker()
+        self.assertEqual(tr.update([self.weak()]), [])
+        self.assertEqual(tr.update([self.weak()]), [])
+        self.assertEqual(len(tr.update([self.weak()])), 1)
+        self.assertEqual(len(tr.update([])), 1)   # đã xác nhận thì sót 1 lần vẫn giữ
+
+    def test_weak_streak_resets_on_miss(self):
+        tr = P.ObjectTracker()
+        tr.update([self.weak()])
+        tr.update([self.weak()])
+        tr.update([])
+        self.assertEqual(tr.update([self.weak()]), [])
+
+    def test_strong_detection_confirms_track(self):
+        tr = P.ObjectTracker()
+        tr.update([obj("vehicle", 2, cls="motorcycle")])
+        self.assertEqual(len(tr.update([self.weak()])), 1)
+
+
+class DepthMemoryTest(unittest.TestCase):
+    def mem(self):
+        m = P.DepthMemory(seconds=10, keep=0.5)
+        m.update(0.0, 0, [obj("vehicle", 3, cls="motorcycle")], 0.2)
+        return m
+
+    def test_remembers_within_window_with_evidence(self):
+        m = self.mem()
+        rem = m.update(5.0, 0, [], 0.15)
+        self.assertEqual([(o["level"], o["age"]) for o in rem], [(3, 5.0)])
+        water = np.zeros((H, W), bool)
+        water[:60] = True
+        lv, ev, _ = P.frame_decision(water, None, rem, H, W)
+        self.assertEqual(lv, 3)
+        self.assertEqual(ev, "Xe máy ngập hết bánh (đo 5 giây trước, cùng cảnh)")
+
+    def test_expires_after_window(self):
+        self.assertEqual(self.mem().update(10.5, 0, [], 0.2), [])
+
+    def test_water_loss_drops_immediately_and_for_good(self):
+        m = self.mem()
+        self.assertEqual(m.update(2.0, 0, [], 0.05), [])   # < 50% độ phủ lúc đo
+        self.assertEqual(m.update(3.0, 0, [], 0.2), [])    # nước quay lại cũng không khôi phục
+
+    def test_scene_cut_drops(self):
+        self.assertEqual(self.mem().update(2.0, 1, [], 0.2), [])
+
+    def test_current_object_of_same_or_higher_level_wins(self):
+        m = self.mem()
+        self.assertEqual(m.update(2.0, 0, [obj("vehicle", 3, cls="motorcycle")], 0.2), [])
+        self.assertEqual(len(m.update(3.0, 0, [obj("vehicle", 1, cls="motorcycle")], 0.2)), 1)
+
+    def test_level_one_is_not_remembered(self):
+        m = P.DepthMemory(seconds=10, keep=0.5)
+        m.update(0.0, 0, [obj("person", 1)], 0.2)
+        self.assertEqual(m.update(1.0, 0, [], 0.2), [])
+
+
 class SmootherTest(unittest.TestCase):
     def test_hysteresis(self):
         s = P.WaterSmoother(0.6)
@@ -205,12 +267,12 @@ class GroundCacheTest(unittest.TestCase):
 
 class FlagTest(unittest.TestCase):
     def test_flags_off(self):
-        old = {k: os.environ.get(k) for k in ("USE_POSE", "USE_DETECT", "USE_DEPTH_CLS", "USE_GROUND")}
+        old = {k: os.environ.get(k) for k in ("USE_POSE", "USE_DETECT", "USE_DEPTH_CLS", "USE_GROUND", "USE_DEPTH_MEMORY")}
         try:
             for k in old:
                 os.environ[k] = "0"
             m = importlib.reload(P)
-            self.assertFalse(any((m.USE_POSE, m.USE_DETECT, m.USE_DEPTH_CLS, m.USE_GROUND)))
+            self.assertFalse(any((m.USE_POSE, m.USE_DETECT, m.USE_DEPTH_CLS, m.USE_GROUND, m.USE_DEPTH_MEMORY)))
         finally:
             for k, v in old.items():
                 if v is None:

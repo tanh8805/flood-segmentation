@@ -239,6 +239,7 @@ def process_video(video_path, out_path, progress=None):
     pending = []   # khung hình từ lần chạy model trước tới trước lần chạy kế tiếp (chờ để hòa trộn mask)
     prev = None    # (overlay, stats) của lần chạy model trước
     smoother, tracker, ground = P.WaterSmoother(MASK_SMOOTH), P.ObjectTracker(), P.GroundCache(pipe, ground_every)
+    memory = P.DepthMemory()
     scenes = SceneCutDetector(round(INFER_FPS))
     scene = 0
     writer = open_writer(out_path, w, h + banner(w, 0, "").shape[0], fps)
@@ -299,7 +300,8 @@ def process_video(video_path, out_path, progress=None):
                     water_raw, objs = pipe.infer(frame)
                     water, objs = smoother.update(water_raw), tracker.update(objs)
                     gmask = ground.update(frame, cut) if water.any() else None
-                    _, _, st = P.frame_decision(water, gmask, objs, h, w)
+                    remembered = memory.update(idx / fps, scene, objs, float(water.mean())) if P.USE_DEPTH_MEMORY else []
+                    _, _, st = P.frame_decision(water, gmask, objs + remembered, h, w)
                     stats = {"time_s": round(idx / fps, 2), "scene": scene, **st}
                     frames.append(stats)
                     kf_index.append(idx)

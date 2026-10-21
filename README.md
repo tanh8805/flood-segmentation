@@ -75,6 +75,8 @@ Bật/tắt từng phần bằng biến môi trường `USE_POSE`, `USE_DETECT`,
 | `GROUND_MODEL` | `nvidia/segformer-b2-finetuned-ade-512-512` | model mặt đất |
 | `WATER_CONF` / `OBJ_CONF` / `KP_CONF` / `KP_HIGH` | 0.4 / 0.35 / 0.5 / 0.7 | ngưỡng conf: nước / vật / keypoint / mắt cá "cao" |
 | `OBJ_CONF_2W` / `DARK_LUM` / `DARK_SCOPE` / `DETECT_IMGSZ` | = `OBJ_CONF` / 0 / `det` / 0 | tuỳ chọn thử cho cảnh tối (tắt mặc định): conf riêng xe máy/xe đạp; CLAHE khi độ sáng xám < ngưỡng (`det`: chỉ detect/pose, `all`: cả mask nước và crop depth_cls); imgsz detect |
+| `USE_DEPTH_MEMORY` / `DEPTH_MEMORY_S` / `MEMORY_WATER_KEEP` / `MEMORY_MIN_STEPS` | 0 / 10 / 0.5 / 1 | tuỳ chọn thử, **tắt mặc định, chưa có số liệu ủng hộ**: nhớ bậc ≥ 2 của vật tin cậy tối đa 10 giây khi cùng cảnh và nước còn (evidence ghi "đo X giây trước"); trên test VN nó làm báo dư tăng 0.08 → 0.35 |
+| `DETECT_LOW_CONF` / `TRACK_CONFIRM_STEPS` | 0.15 / 3 | xe conf trong [0.15, ngưỡng) chỉ nhận khi cùng track thấy ≥ 3 lần suy luận liên tiếp (0 = tắt); không đổi kết quả test VN |
 | `COVER_WIDE` | 0.30 | độ phủ nước/mặt đất từ mức này thì căn cứ ghi "Nước phủ rộng" (mức vẫn tối đa 1) |
 | `DEPTH_UP_P` | 0.35 | chọn bậc cao hơn của depth_cls nếu xác suất ≥ giá trị này |
 | `SHALLOW_F` / `KNEE_F` | 0.25 / 0.9 | tỉ lệ ống chân bị nước phủ: bậc 1 / bậc 3 |
