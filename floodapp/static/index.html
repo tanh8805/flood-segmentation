@@ -139,7 +139,7 @@
   <!-- Bước 2: kết quả -->
   <section id="result" hidden>
     <div class="card again">
-      <div><b id="doneName"></b><br><span>Đã phân tích xong</span></div>
+      <div style="min-width:0"><b id="doneName" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b><span>Đã phân tích xong</span></div>
       <button class="btn" id="reset" type="button">Phân tích video khác</button>
     </div>
 
@@ -280,12 +280,12 @@ function segAt(t) { const i = segs.findIndex(s => t < s.end_s); return segs[i < 
 let lastFlooded = null;
 function update(t) {
   if (!R) return;
-  const s = segAt(t), f = s.flooded, pct = Math.round(s.water_ratio * 100);
+  const s = segAt(t), f = s.flooded;
   $("at").textContent = "Tại " + clock(t);
   $("head").style.left = Math.min(t / R.duration_s * 100, 100) + "%";
   $("track").setAttribute("aria-valuenow", Math.round(t));
   $("track").setAttribute("aria-valuetext", `${clock(t)}, ${NAME(f)}`);
-  $("ratio").textContent = `Bộ phân loại ${s.p.toFixed(2)} · nước phủ ${pct}% mặt đường`;
+  $("ratio").textContent = `Xác suất ngập ${s.p.toFixed(2)}`;
   $("reason").textContent = s.evidence;
   $("fill").style.height = Math.max(8, Math.min(Math.round(s.p * 100), 100)) + "%";
   if (f === lastFlooded) return;

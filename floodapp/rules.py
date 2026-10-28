@@ -93,4 +93,8 @@ def segment_states(states, seg, min_frac=MIN_FRAME_FRAC):
 
 def evidence_text(flooded, p, ratio):
     water = f"nước phủ {ratio:.0%} mặt đường" if ratio >= WATER_MIN_RATIO else "chưa thấy vùng nước rõ"
-    return f"Bộ phân loại {p:.2f}, {water}" if flooded else f"Không ngập: bộ phân loại {p:.2f}, {water}"
+    if flooded:
+        return f"Bộ phân loại {p:.2f}, {water}"
+    if ratio >= WATER_MIN_RATIO:
+        return f"Không ngập: bộ phân loại {p:.2f}; vùng nước {ratio:.0%} chỉ để tham khảo (có thể là phản chiếu hoặc mặt đường ướt)"
+    return f"Không ngập: bộ phân loại {p:.2f}, {water}"

@@ -40,7 +40,7 @@ Chọn ngưỡng đổi 12 báo nhầm lấy 5 bỏ sót thêm; chênh F1 giữa
 
 ### Lỗi còn lại (bản v5 chọn ngưỡng)
 - Bỏ sót 6 đoạn ngập: `ngap_01` đoạn 5, 6, 32, 33 (cảnh ngập ban đêm, p trung bình đoạn 0.54–0.92, không vượt ngưỡng bật 0.8 liên tục), `ngap_6` đoạn 9 (cận cảnh xe, p 0.30), `v5_ngap_2` đoạn 1 (p 0.48).
-- Báo nhầm 3 đoạn: `ngap_9` đoạn 0 (nhãn không ngập, p 0.94), `khong_ngap_01` đoạn 0–1 (mưa, đường ướt ban ngày).
+- Báo nhầm 3 đoạn: `ngap_9` đoạn 0 (nhãn không ngập; đã xem lại: đầu time-lapse, nước mới lan tới, còn mảng nhựa khô lớn bên phải nên giữ nhãn; p 0.94), `khong_ngap_01` đoạn 0–1 (mưa, đường ướt ban ngày).
 - Hạn chế: 18 clip / 272 đoạn là nhỏ, khoảng tin cậy rộng; các clip đêm ướt chiếm 54 đoạn không ngập; cảnh trong nhà không hỗ trợ; `ngap_6` là video quảng cáo.
 
 ## Tốc độ (RTX 3050 4 GB, mỗi lần suy luận = 1 khung, 5/giây)
@@ -48,6 +48,7 @@ GPU ~90–135 ms/lần (kèm ghi video kết quả, đo ở `src/check_app.py`);
 
 ## Kiểm tra
 - App thật vs mô phỏng trên cache với bộ phân loại cuối, 2 clip (`v5_khong_3`, `ngap_7`): khớp 21/21 đoạn (`src/check_app.py`).
+- Giao diện: mở bằng trình duyệt headless (Chromium), upload 1 clip ngập + 1 clip đêm ướt, chụp trang kết quả ở 1280 px và 390 px: không lỗi console, không cuộn ngang; ô trạng thái hiển thị đúng Ngập / Không ngập.
 - Unit test luật và đọc video: `python -m pytest floodapp/tests` (9 test).
 
 ## Chạy
