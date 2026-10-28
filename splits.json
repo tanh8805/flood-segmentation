@@ -1,0 +1,38 @@
+{
+  "note": "Chia theo clip. DEV: clip da dung truoc day hoac trung hash voi video cu. TEST: con lai, cham 1 lan.",
+  "dev": {
+    "ngap": [
+      "ngap_01",
+      "ngap_02",
+      "ngap_3",
+      "ngap_4"
+    ],
+    "khong_ngap": [
+      "khong_ngap_01",
+      "khong_ngap_02",
+      "khong_ngap_03"
+    ]
+  },
+  "test": {
+    "ngap": [
+      "ngap_5",
+      "ngap_6",
+      "ngap_7",
+      "ngap_9"
+    ],
+    "khong_ngap": [
+      "khong_ngap_04",
+      "khong_ngap_05"
+    ]
+  },
+  "reasons": {
+    "ngap_01": "da dung lam test truoc day",
+    "ngap_02": "da dung lam test truoc day",
+    "ngap_3": "trung md5 voi Downloads/PTHTTM/uploads/0924(1).mp4",
+    "ngap_4": "trung md5 voi Downloads/PTHTTM/uploads/FSave...Ha-Noi-dang-mua-r...mp4",
+    "khong_ngap_01": "da dung lam test truoc day",
+    "khong_ngap_02": "da dung lam test truoc day",
+    "khong_ngap_03": "da dung lam test truoc day"
+  },
+  "warning": "Chi con 2 clip khong_ngap chua dung (04, 05) nen TEST khong dat 4 clip khong ngap (ngap_8 trung noi dung ngap_6, da xoa)."
+}

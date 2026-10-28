@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Cảnh báo ngập</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f5f7;
+    --surface: #ffffff;
+    --ink: #10263a;
+    --muted: #5b6b78;
+    --line: #dce3e8;
+    --water: #0b6fae;
+    --water-soft: #e3f0f8;
+    /* 2 trạng thái: màu đậm (chữ, viền) + màu nhạt (nền nước dâng) */
+    --no: #18804a; --no-soft: #e2f3e8;
+    --yes: #c4122f; --yes-soft: #fbdde2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; color: var(--ink); background-color: var(--bg);
+    /* đường đồng mức rất nhạt, gợi bản đồ địa hình/thủy văn */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480' fill='none' stroke='%230b6fae' stroke-opacity='.06' stroke-width='1.2'%3E%3Cpath d='M-20 90c80-40 160 40 250 0s170-50 270 10'/%3E%3Cpath d='M-20 150c90-40 170 40 260 0s160-40 260 10'/%3E%3Cpath d='M-20 210c90-30 160 50 250 10s170-50 270 0'/%3E%3Cpath d='M-20 330c80-40 170 30 260-10s160-30 260 20'/%3E%3Cpath d='M-20 400c90-30 160 40 250 0s170-40 270 10'/%3E%3C/svg%3E");
+    font: 16px/1.55 "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+  :focus-visible { outline: 3px solid var(--water); outline-offset: 2px; border-radius: 6px; }
+  button { font: inherit; }
+
+  header { margin-bottom: 24px; }
+  header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.015em; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 10px; padding: 10px 18px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--water); border-color: var(--water); color: #fff; }
+  .btn.primary:hover { background: #095f96; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  /* ---------- Tải video ---------- */
+  .drop {
+    display: grid; justify-items: center; text-align: center; gap: 6px;
+    padding: 44px 20px 36px; border: 2px dashed #b9cfdd; border-radius: 16px;
+    background: rgba(255, 255, 255, .7); transition: border-color .2s, background .2s;
+  }
+  .drop.drag { border-color: var(--water); background: var(--water-soft); }
+  .drop svg { width: 46px; height: 46px; margin-bottom: 6px; }
+  .drop h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  .drop .hint { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .drop .chosen { margin: 0 0 14px; font-weight: 600; overflow-wrap: anywhere; }
+  .drop .chosen span { color: var(--muted); font-weight: 400; }
+  .drop .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .progress { width: min(420px, 100%); height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 18px; }
+  .progress div { height: 100%; width: 0; background: var(--water); transition: width .4s ease; }
+  .status { margin: 8px 0 0; font-size: 14px; color: var(--muted); min-height: 1.55em; }
+  .status.error { color: var(--yes); font-weight: 600; }
+
+  .again { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 20px; }
+  .again b { font-weight: 600; overflow-wrap: anywhere; }
+  .again span { color: var(--muted); font-size: 14px; }
+
+  [hidden] { display: none !important; }
+
+  /* ---------- Kết quả ---------- */
+  .result { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+  .player { padding: 12px; }
+  video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #0b1620; border-radius: 10px; }
+
+  .timeline { margin: 14px 4px 4px; }
+  .track { position: relative; height: 16px; border-radius: 8px; overflow: hidden; display: flex; background: var(--line); cursor: pointer; }
+  .track i { height: 100%; flex: none; }
+  .head { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; pointer-events: none; left: 0; }
+  .track-wrap { position: relative; padding: 5px 0; }
+  .times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
+
+  /* Ô trạng thái trực tiếp: nền nước dâng theo tỉ lệ nước của thời điểm đang phát */
+  .live { position: sticky; top: 16px; overflow: hidden; min-height: 360px; display: flex; flex-direction: column; }
+  .live .fill {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 25%;
+    background: var(--soft); border-top: 3px solid var(--strong);
+    transition: height .5s cubic-bezier(.3, .7, .3, 1), background-color .5s, border-color .5s;
+  }
+  .live .body { position: relative; padding: 22px 22px 20px; display: flex; flex-direction: column; flex: 1; }
+  .live .at { font-size: 14px; color: var(--muted); }
+  .live .name { margin: 2px 0 10px; font-size: 44px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; color: var(--strong); transition: color .3s; }
+  .live .ratio { margin: 0 0 10px; font-size: 20px; font-weight: 700; }
+  .live .reason { margin: 0; font-size: 16px; }
+  .overall { margin: 16px 2px 0; font-size: 14px; color: var(--muted); }
+  .overall b { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 860px) {
+    .result { grid-template-columns: 1fr; }
+    .live { position: relative; min-height: 240px; order: -1; }
+    .live .name { font-size: 36px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .live .fill, .live .name, .progress div { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Cảnh báo ngập đường phố</h1>
+    <p>Tải video camera lên, hệ thống cho biết đường có ngập hay không ở từng thời điểm của video.</p>
+  </header>
+
+  <!-- Bước 1: chọn và tải video -->
+  <section class="drop" id="drop" aria-label="Tải video">
+    <svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="#0b6fae" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M24 5c6 8 11 14 11 21a11 11 0 0 1-22 0c0-7 5-13 11-21z"/>
+      <path d="M6 41c3-2 6-2 9 0s6 2 9 0 6-2 9 0 6 2 9 0"/>
+    </svg>
+    <h2 id="dropTitle">Kéo video vào đây</h2>
+    <p class="hint" id="hint">hoặc chọn tệp từ máy. Nhận mp4, avi, mov, mkv, webm.</p>
+    <p class="chosen" id="chosen" hidden></p>
+    <div class="actions">
+      <input type="file" id="file" accept="video/*" hidden>
+      <button class="btn" id="pick" type="button">Chọn video</button>
+      <button class="btn primary" id="go" type="button" hidden>Phân tích</button>
+    </div>
+    <div class="progress" id="progress" hidden><div id="bar"></div></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- Bước 2: kết quả -->
+  <section id="result" hidden>
+    <div class="card again">
+      <div><b id="doneName"></b><br><span>Đã phân tích xong</span></div>
+      <button class="btn" id="reset" type="button">Phân tích video khác</button>
+    </div>
+
+    <div class="result">
+      <div>
+        <div class="card player">
+          <video id="video" controls playsinline></video>
+          <div class="timeline">
+            <div class="track-wrap">
+              <div class="track" id="track" tabindex="0" role="slider" aria-label="Ngập hoặc không ngập theo thời gian, bấm để tua" aria-valuemin="0"></div>
+              <span class="head" id="head"></span>
+            </div>
+            <div class="times"><span>0:00</span><span id="endTime"></span></div>
+            <div class="legend">
+              <span><i style="background:var(--no)"></i>Không ngập</span>
+              <span><i style="background:var(--yes)"></i>Ngập</span>
+            </div>
+          </div>
+        </div>
+        <p class="overall" id="overall"></p>
+      </div>
+
+      <aside class="card live" id="live" aria-live="polite">
+        <div class="fill" id="fill"></div>
+        <div class="body">
+          <span class="at" id="at">Tại 0:00</span>
+          <div class="name" id="name">Không ngập</div>
+          <p class="ratio" id="ratio"></p>
+          <p class="reason" id="reason"></p>
+        </div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const clock = s => { s = Math.max(0, s || 0); return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); };
+const strong = f => f ? "var(--yes)" : "var(--no)", soft = f => f ? "var(--yes-soft)" : "var(--no-soft)";
+const NAME = f => f ? "Ngập" : "Không ngập";
+
+let file = null, R = null, segs = [], maxMB = 500;
+
+fetch("/health").then(r => r.json()).then(h => {
+  if (h.max_upload_mb) { maxMB = h.max_upload_mb; $("hint").textContent += ` Tối đa ${maxMB} MB.`; }
+}).catch(() => setStatus("Không kết nối được máy chủ. Kiểm tra lệnh uvicorn còn chạy.", true));
+
+/* ---------- Chọn tệp ---------- */
+function choose(f) {
+  if (!f) return;
+  if (!f.type.startsWith("video/") && !/\.(mp4|avi|mov|mkv|webm|m4v)$/i.test(f.name)) {
+    return setStatus(`"${f.name}" không phải video. Chọn tệp mp4, avi, mov, mkv hoặc webm.`, true);
+  }
+  if (f.size > maxMB * 1048576) return setStatus(`Video nặng hơn ${maxMB} MB. Cắt ngắn video rồi thử lại.`, true);
+  file = f;
+  $("dropTitle").textContent = "Sẵn sàng phân tích";
+  $("chosen").hidden = false;
+  $("chosen").innerHTML = `${escapeHtml(f.name)} <span>(${(f.size / 1048576).toFixed(1).replace(".", ",")} MB)</span>`;
+  $("pick").textContent = "Chọn video khác";
+  $("go").hidden = false;
+  setStatus("");
+}
+const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+$("pick").onclick = () => $("file").click();
+$("file").onchange = e => choose(e.target.files[0]);
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", e => choose(e.dataTransfer.files[0]));
+
+function setStatus(msg, err = false) { $("status").textContent = msg; $("status").className = "status" + (err ? " error" : ""); }
+function setBar(p) { $("progress").hidden = false; $("bar").style.width = Math.round(p * 100) + "%"; }
+function busy(on) { $("go").disabled = $("pick").disabled = on; }
+
+/* ---------- Tải lên, chờ phân tích ---------- */
+$("go").onclick = () => {
+  if (!file) return;
+  busy(true); setBar(0);
+  const fd = new FormData(); fd.append("file", file);
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/analyze");
+  xhr.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    setBar(e.loaded / e.total * .2);
+    setStatus(`Đang tải lên ${Math.round(e.loaded / e.total * 100)}%`);
+  };
+  xhr.onload = () => {
+    let j = {}; try { j = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status >= 400) return fail(j.detail || `máy chủ trả lỗi ${xhr.status}`);
+    poll(j.job_id);
+  };
+  xhr.onerror = () => fail("không gửi được video. Kiểm tra máy chủ còn chạy rồi thử lại.");
+  xhr.send(fd);
+};
+
+async function poll(id) {
+  try {
+    const j = await (await fetch("/jobs/" + id)).json();
+    if (j.status === "error") return fail(j.error);
+    setBar(.2 + j.progress * .8);
+    if (j.status === "done") return show(j);
+    setStatus(j.status === "queued" ? "Đang chờ tới lượt xử lý" : `Đang phân tích ${Math.round(j.progress * 100)}%`);
+    setTimeout(() => poll(id), 1000);
+  } catch { fail("mất kết nối với máy chủ khi đang phân tích."); }
+}
+function fail(msg) { setStatus("Không phân tích được: " + msg, true); $("progress").hidden = true; busy(false); }
+
+/* ---------- Hiển thị kết quả ---------- */
+function show(job) {
+  R = job.result;
+  segs = R.segments;
+  busy(false);
+  drop.hidden = true;
+  $("result").hidden = false;
+  $("doneName").textContent = file ? file.name : "Video";
+  $("video").src = job.video_url;
+  $("endTime").textContent = clock(R.duration_s);
+  $("track").setAttribute("aria-valuemax", Math.round(R.duration_s));
+
+  // Dải 2 màu: mỗi đoạn tô theo ngập / không ngập
+  $("track").innerHTML = segs.map(s =>
+    `<i style="width:${(s.end_s - s.start_s) / R.duration_s * 100}%;background:${strong(s.flooded)}" title="${clock(s.start_s)}–${clock(s.end_s)}: ${NAME(s.flooded)}"></i>`
+  ).join("");
+
+  // Một dòng tổng kết
+  $("overall").innerHTML = R.flooded
+    ? `Video <b>có ngập</b>: tổng cộng ${Math.round(R.flooded_seconds)} giây, ${R.flood_intervals.length} khoảng (${R.flood_intervals.map(i => clock(i.start_s) + "–" + clock(i.end_s)).join(", ")}).`
+    : `Cả video <b>không ngập</b>.`;
+
+  update(0);
+  scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+/* ---------- Đồng bộ theo thời gian video ---------- */
+const video = $("video");
+function segAt(t) { const i = segs.findIndex(s => t < s.end_s); return segs[i < 0 ? segs.length - 1 : i]; }
+
+let lastFlooded = null;
+function update(t) {
+  if (!R) return;
+  const s = segAt(t), f = s.flooded, pct = Math.round(s.water_ratio * 100);
+  $("at").textContent = "Tại " + clock(t);
+  $("head").style.left = Math.min(t / R.duration_s * 100, 100) + "%";
+  $("track").setAttribute("aria-valuenow", Math.round(t));
+  $("track").setAttribute("aria-valuetext", `${clock(t)}, ${NAME(f)}`);
+  $("ratio").textContent = `Bộ phân loại ${s.p.toFixed(2)} · nước phủ ${pct}% mặt đường`;
+  $("reason").textContent = s.evidence;
+  $("fill").style.height = Math.max(8, Math.min(Math.round(s.p * 100), 100)) + "%";
+  if (f === lastFlooded) return;
+  lastFlooded = f;
+  const live = $("live");
+  live.style.setProperty("--strong", strong(f));
+  live.style.setProperty("--soft", soft(f));
+  $("name").textContent = NAME(f);
+}
+video.addEventListener("timeupdate", () => update(video.currentTime));
+video.addEventListener("seeked", () => update(video.currentTime));
+
+function seek(t) { video.currentTime = Math.max(0, Math.min(t, R.duration_s)); update(video.currentTime); }
+$("track").onclick = e => { const b = $("track").getBoundingClientRect(); seek((e.clientX - b.left) / b.width * R.duration_s); };
+$("track").onkeydown = e => {
+  if (e.key === "ArrowRight") { seek(video.currentTime + 2); e.preventDefault(); }
+  if (e.key === "ArrowLeft") { seek(video.currentTime - 2); e.preventDefault(); }
+};
+
+/* ---------- Phân tích video khác ---------- */
+$("reset").onclick = () => {
+  video.pause(); video.removeAttribute("src"); video.load();
+  R = null; file = null; lastFlooded = null;
+  $("result").hidden = true; drop.hidden = false;
+  $("dropTitle").textContent = "Kéo video vào đây";
+  $("chosen").hidden = true; $("go").hidden = true; $("progress").hidden = true;
+  $("pick").textContent = "Chọn video"; $("file").value = "";
+  setStatus("");
+};
+</script>
+</body>
+</html>

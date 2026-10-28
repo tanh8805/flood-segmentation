@@ -1,0 +1,10 @@
+ultralytics>=8.3
+transformers>=4.40
+open_clip_torch>=2.24
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+opencv-python-headless>=4.8
+numpy
+imageio-ffmpeg>=0.5
+Pillow

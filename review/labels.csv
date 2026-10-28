@@ -1,0 +1,231 @@
+clip,split,seg,t0,t1,label,note
+khong_ngap_01,dev,0,0.0,2.0,khong_ngap,
+khong_ngap_01,dev,1,2.0,4.0,khong_ngap,
+khong_ngap_01,dev,2,4.0,6.0,khong_ngap,
+khong_ngap_01,dev,3,6.0,8.0,khong_ngap,
+khong_ngap_01,dev,4,8.0,10.0,khong_ngap,
+khong_ngap_01,dev,5,10.0,12.0,khong_ngap,
+khong_ngap_01,dev,6,12.0,14.0,khong_ngap,
+khong_ngap_01,dev,7,14.0,16.0,khong_ngap,
+khong_ngap_01,dev,8,16.0,18.0,khong_ngap,
+khong_ngap_01,dev,9,18.0,20.0,khong_ngap,
+khong_ngap_01,dev,10,20.0,22.0,khong_ngap,
+khong_ngap_01,dev,11,22.0,24.0,khong_ngap,
+khong_ngap_01,dev,12,24.0,26.0,khong_ngap,
+khong_ngap_01,dev,13,26.0,28.0,khong_ngap,
+khong_ngap_01,dev,14,28.0,30.0,bo_qua,the TikTok cuoi
+khong_ngap_01,dev,15,30.0,31.833333333333332,bo_qua,the TikTok cuoi
+khong_ngap_02,dev,0,0.0,2.0,khong_ngap,
+khong_ngap_02,dev,1,2.0,4.0,khong_ngap,
+khong_ngap_02,dev,2,4.0,6.0,khong_ngap,
+khong_ngap_02,dev,3,6.0,8.0,khong_ngap,
+khong_ngap_02,dev,4,8.0,10.0,khong_ngap,
+khong_ngap_02,dev,5,10.0,12.0,khong_ngap,
+khong_ngap_02,dev,6,12.0,14.0,khong_ngap,
+khong_ngap_02,dev,7,14.0,16.0,khong_ngap,
+khong_ngap_02,dev,8,16.0,18.0,khong_ngap,
+khong_ngap_02,dev,9,18.0,20.0,khong_ngap,
+khong_ngap_02,dev,10,20.0,22.0,khong_ngap,
+khong_ngap_02,dev,11,22.0,24.0,khong_ngap,
+khong_ngap_02,dev,12,24.0,26.0,bo_qua,the TikTok cuoi
+khong_ngap_02,dev,13,26.0,28.0,bo_qua,the TikTok cuoi
+khong_ngap_03,dev,0,0.0,2.0,khong_ngap,
+khong_ngap_03,dev,1,2.0,4.0,khong_ngap,
+khong_ngap_03,dev,2,4.0,6.0,khong_ngap,
+khong_ngap_03,dev,3,6.0,8.0,khong_ngap,
+khong_ngap_03,dev,4,8.0,10.0,khong_ngap,
+khong_ngap_03,dev,5,10.0,12.0,khong_ngap,
+khong_ngap_03,dev,6,12.0,14.0,khong_ngap,
+khong_ngap_03,dev,7,14.0,16.0,khong_ngap,
+khong_ngap_03,dev,8,16.0,18.0,khong_ngap,
+khong_ngap_03,dev,9,18.0,20.0,khong_ngap,
+khong_ngap_03,dev,10,20.0,22.0,khong_ngap,
+khong_ngap_03,dev,11,22.0,24.0,khong_ngap,
+khong_ngap_03,dev,12,24.0,26.0,bo_qua,the TikTok cuoi
+khong_ngap_03,dev,13,26.0,27.266666666666666,bo_qua,the TikTok cuoi
+khong_ngap_04,test,0,0.0,2.0,khong_ngap,
+khong_ngap_04,test,1,2.0,4.0,khong_ngap,
+khong_ngap_04,test,2,4.0,6.0,khong_ngap,
+khong_ngap_04,test,3,6.0,8.0,khong_ngap,
+khong_ngap_04,test,4,8.0,10.0,khong_ngap,
+khong_ngap_04,test,5,10.0,12.0,khong_ngap,
+khong_ngap_04,test,6,12.0,14.0,khong_ngap,
+khong_ngap_04,test,7,14.0,16.0,khong_ngap,
+khong_ngap_04,test,8,16.0,18.0,khong_ngap,
+khong_ngap_04,test,9,18.0,20.0,khong_ngap,
+khong_ngap_04,test,10,20.0,22.0,khong_ngap,
+khong_ngap_04,test,11,22.0,24.0,khong_ngap,
+khong_ngap_04,test,12,24.0,26.0,khong_ngap,
+khong_ngap_04,test,13,26.0,28.0,khong_ngap,
+khong_ngap_04,test,14,28.0,30.0,khong_ngap,
+khong_ngap_04,test,15,30.0,32.0,khong_ngap,
+khong_ngap_04,test,16,32.0,34.0,khong_ngap,
+khong_ngap_04,test,17,34.0,36.0,khong_ngap,
+khong_ngap_04,test,18,36.0,38.0,khong_ngap,
+khong_ngap_04,test,19,38.0,40.0,khong_ngap,giot nuoc lon che ong kinh; duong uot phan chieu
+khong_ngap_04,test,20,40.0,42.0,khong_ngap,giot nuoc lon che ong kinh; duong uot phan chieu
+khong_ngap_05,test,0,0.0,2.0,khong_ngap,
+khong_ngap_05,test,1,2.0,4.0,khong_ngap,
+khong_ngap_05,test,2,4.0,6.0,khong_ngap,
+ngap_01,dev,0,0.0,2.0,ngap,
+ngap_01,dev,1,2.0,4.0,ngap,
+ngap_01,dev,2,4.0,6.0,ngap,
+ngap_01,dev,3,6.0,8.0,ngap,
+ngap_01,dev,4,8.0,10.0,ngap,
+ngap_01,dev,5,10.0,12.0,ngap,
+ngap_01,dev,6,12.0,14.0,ngap,
+ngap_01,dev,7,14.0,16.0,ngap,
+ngap_01,dev,8,16.0,18.0,ngap,
+ngap_01,dev,9,18.0,20.0,ngap,
+ngap_01,dev,10,20.0,22.0,ngap,
+ngap_01,dev,11,22.0,24.0,ngap,
+ngap_01,dev,12,24.0,26.0,ngap,
+ngap_01,dev,13,26.0,28.0,ngap,
+ngap_01,dev,14,28.0,30.0,ngap,
+ngap_01,dev,15,30.0,32.0,ngap,
+ngap_01,dev,16,32.0,34.0,ngap,
+ngap_01,dev,17,34.0,36.0,ngap,
+ngap_01,dev,18,36.0,38.0,ngap,
+ngap_01,dev,19,38.0,40.0,ngap,
+ngap_01,dev,20,40.0,42.0,ngap,
+ngap_01,dev,21,42.0,44.0,ngap,
+ngap_01,dev,22,44.0,46.0,ngap,
+ngap_01,dev,23,46.0,48.0,ngap,
+ngap_01,dev,24,48.0,50.0,ngap,
+ngap_01,dev,25,50.0,52.0,ngap,
+ngap_01,dev,26,52.0,54.0,ngap,
+ngap_01,dev,27,54.0,56.0,ngap,
+ngap_01,dev,28,56.0,58.0,ngap,
+ngap_01,dev,29,58.0,60.0,ngap,
+ngap_01,dev,30,60.0,62.0,ngap,
+ngap_01,dev,31,62.0,64.0,ngap,
+ngap_01,dev,32,64.0,66.0,ngap,
+ngap_01,dev,33,66.0,68.0,ngap,
+ngap_01,dev,34,68.0,70.0,ngap,
+ngap_01,dev,35,70.0,72.0,ngap,"nguoi duyet: sua bo_qua -> ngap (35:70s, 36:72s)"
+ngap_01,dev,36,72.0,74.0,ngap,"nguoi duyet: sua bo_qua -> ngap (35:70s, 36:72s)"
+ngap_01,dev,37,74.0,76.0,bo_qua,the TikTok cuoi
+ngap_01,dev,38,76.0,78.0,bo_qua,the TikTok cuoi
+ngap_02,dev,0,0.0,2.0,ngap,
+ngap_02,dev,1,2.0,4.0,ngap,
+ngap_02,dev,2,4.0,6.0,ngap,
+ngap_02,dev,3,6.0,8.0,ngap,
+ngap_02,dev,4,8.0,10.0,ngap,
+ngap_02,dev,5,10.0,12.0,ngap,
+ngap_02,dev,6,12.0,14.0,ngap,
+ngap_3,dev,0,0.0,2.0,ngap,"vung nuoc bun phu mat duong, nguoi vot rac cong - mo ho vung lon"
+ngap_3,dev,1,2.0,4.0,ngap,"vung nuoc bun phu mat duong, nguoi vot rac cong - mo ho vung lon"
+ngap_3,dev,2,4.0,6.0,ngap,"vung nuoc bun phu mat duong, nguoi vot rac cong - mo ho vung lon"
+ngap_3,dev,3,6.0,7.466666666666667,ngap,"vung nuoc bun phu mat duong, nguoi vot rac cong - mo ho vung lon"
+ngap_4,dev,0,0.0,2.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,1,2.0,4.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,2,4.0,6.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,3,6.0,8.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,4,8.0,10.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,5,10.0,12.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,6,12.0,14.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,7,14.0,16.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,8,16.0,18.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_4,dev,9,18.0,20.0,ngap,"nguoi duyet: gara ngap, nuoc toi gan bien so xe"
+ngap_5,test,0,0.0,2.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,1,2.0,4.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,2,4.0,6.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,3,6.0,8.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,4,8.0,10.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,5,10.0,12.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,6,12.0,14.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,7,14.0,16.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,8,16.0,18.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,9,18.0,20.0,ngap,"phong vien che mat tien canh, nuoc sau phia sau"
+ngap_5,test,10,20.0,22.0,ngap,
+ngap_5,test,11,22.0,24.0,ngap,
+ngap_5,test,12,24.0,26.0,ngap,
+ngap_5,test,13,26.0,28.0,ngap,
+ngap_5,test,14,28.0,30.0,ngap,
+ngap_5,test,15,30.0,32.0,ngap,
+ngap_5,test,16,32.0,34.0,ngap,
+ngap_5,test,17,34.0,36.0,ngap,
+ngap_5,test,18,36.0,38.0,ngap,
+ngap_5,test,19,38.0,40.0,ngap,
+ngap_5,test,20,40.0,42.0,ngap,
+ngap_5,test,21,42.0,44.0,ngap,
+ngap_5,test,22,44.0,46.0,ngap,
+ngap_5,test,23,46.0,48.0,ngap,
+ngap_5,test,24,48.0,50.0,ngap,
+ngap_5,test,25,50.0,52.0,ngap,
+ngap_5,test,26,52.0,54.0,ngap,
+ngap_5,test,27,54.0,56.0,ngap,
+ngap_5,test,28,56.0,58.0,ngap,
+ngap_5,test,29,58.0,60.0,ngap,
+ngap_5,test,30,60.0,62.0,ngap,
+ngap_5,test,31,62.0,64.0,ngap,
+ngap_5,test,32,64.0,66.0,ngap,
+ngap_5,test,33,66.0,68.0,ngap,
+ngap_5,test,34,68.0,70.0,ngap,
+ngap_5,test,35,70.0,72.0,ngap,
+ngap_5,test,36,72.0,74.0,ngap,
+ngap_5,test,37,74.0,76.0,ngap,
+ngap_5,test,38,76.0,78.0,ngap,
+ngap_5,test,39,78.0,80.0,ngap,
+ngap_5,test,40,80.0,82.0,ngap,
+ngap_5,test,41,82.0,84.0,ngap,
+ngap_5,test,42,84.0,86.0,ngap,
+ngap_5,test,43,86.0,88.0,ngap,
+ngap_5,test,44,88.0,90.0,ngap,
+ngap_5,test,45,90.0,92.0,ngap,
+ngap_5,test,46,92.0,94.0,ngap,
+ngap_5,test,47,94.0,96.0,ngap,
+ngap_5,test,48,96.0,98.0,ngap,
+ngap_5,test,49,98.0,100.0,ngap,
+ngap_5,test,50,100.0,102.0,ngap,
+ngap_5,test,51,102.0,104.0,ngap,
+ngap_5,test,52,104.0,106.0,bo_qua,logo bao / man den
+ngap_5,test,53,106.0,108.0,bo_qua,logo bao / man den
+ngap_5,test,54,108.0,110.0,bo_qua,logo bao / man den
+ngap_5,test,55,110.0,112.0,bo_qua,logo bao / man den
+ngap_6,test,0,0.0,2.0,ngap,canh ngap that trong video quang cao
+ngap_6,test,1,2.0,4.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,2,4.0,6.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,3,6.0,8.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,4,8.0,10.0,ngap,canh ngap that trong video quang cao
+ngap_6,test,5,10.0,12.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,6,12.0,14.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,7,14.0,16.0,ngap,canh ngap that trong video quang cao
+ngap_6,test,8,16.0,18.0,ngap,canh ngap that trong video quang cao
+ngap_6,test,9,18.0,20.0,ngap,"nguoi duyet: sua bo_qua -> ngap (9:18s, 16:32s, 17:34s)"
+ngap_6,test,10,20.0,22.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,11,22.0,24.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,12,24.0,26.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,13,26.0,28.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,14,28.0,30.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,15,30.0,32.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,16,32.0,34.0,ngap,"nguoi duyet: sua bo_qua -> ngap (9:18s, 16:32s, 17:34s)"
+ngap_6,test,17,34.0,36.0,ngap,"nguoi duyet: sua bo_qua -> ngap (9:18s, 16:32s, 17:34s)"
+ngap_6,test,18,36.0,38.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,19,38.0,40.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,20,40.0,42.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,21,42.0,44.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,22,44.0,46.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,23,46.0,48.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,24,48.0,50.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,25,50.0,52.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_6,test,26,52.0,54.0,bo_qua,"quang cao bat phu o to, canh khong phai duong ngap"
+ngap_7,test,0,0.0,2.0,ngap,
+ngap_7,test,1,2.0,4.0,ngap,
+ngap_7,test,2,4.0,6.0,ngap,
+ngap_7,test,3,6.0,8.0,ngap,
+ngap_7,test,4,8.0,10.0,ngap,
+ngap_7,test,5,10.0,12.0,ngap,
+ngap_7,test,6,12.0,13.346666666666668,ngap,
+ngap_9,test,0,0.0,2.0,khong_ngap,"time-lapse bat dau ngap, con mang duong kho phia phai - mo ho"
+ngap_9,test,1,2.0,4.0,ngap,
+ngap_9,test,2,4.0,6.0,ngap,
+ngap_9,test,3,6.0,8.0,ngap,
+ngap_9,test,4,8.0,10.0,ngap,
+ngap_9,test,5,10.0,12.0,ngap,
+ngap_9,test,6,12.0,14.0,ngap,
+ngap_9,test,7,14.0,16.0,ngap,
+ngap_9,test,8,16.0,18.0,ngap,
+ngap_9,test,9,18.0,20.0,ngap,
+ngap_9,test,10,20.0,22.0,ngap,
+ngap_9,test,11,22.0,23.033333333333335,ngap,

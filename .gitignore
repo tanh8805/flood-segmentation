@@ -1,0 +1,15 @@
+TASK.md
+PLAN.md
+JOBS.md
+tmp/
+cache/
+review/
+data/
+venv/
+.venv/
+*.pt
+*.npy
+*.jsonl
+__pycache__/
+floodapp/outputs/
+results/*.mp4

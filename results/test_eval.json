@@ -1,0 +1,670 @@
+{
+ "rule": {
+  "name": "combo",
+  "W": 2,
+  "a": 0.9,
+  "b": 0.2,
+  "c": 0.3
+ },
+ "n_segments": 102,
+ "v1": {
+  "tong": {
+   "prec": 0.747,
+   "rec": 0.922,
+   "f1": 0.826,
+   "fpr": 0.96,
+   "tp": 71,
+   "fp": 24,
+   "tn": 1,
+   "fn": 6
+  },
+  "clip": {
+   "khong_ngap_04": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 21,
+    "tn": 0,
+    "fn": 0
+   },
+   "khong_ngap_05": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 3,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_5": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 52,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_6": {
+    "prec": 1.0,
+    "rec": 0.714,
+    "f1": 0.833,
+    "fpr": 0.0,
+    "tp": 5,
+    "fp": 0,
+    "tn": 0,
+    "fn": 2
+   },
+   "ngap_7": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 7,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_9": {
+    "prec": 1.0,
+    "rec": 0.636,
+    "f1": 0.778,
+    "fpr": 0.0,
+    "tp": 7,
+    "fp": 0,
+    "tn": 1,
+    "fn": 4
+   }
+  }
+ },
+ "v3": {
+  "tong": {
+   "prec": 0.753,
+   "rec": 0.948,
+   "f1": 0.839,
+   "fpr": 0.96,
+   "tp": 73,
+   "fp": 24,
+   "tn": 1,
+   "fn": 4
+  },
+  "clip": {
+   "khong_ngap_04": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 21,
+    "tn": 0,
+    "fn": 0
+   },
+   "khong_ngap_05": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 3,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_5": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 52,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_6": {
+    "prec": 1.0,
+    "rec": 0.571,
+    "f1": 0.727,
+    "fpr": 0.0,
+    "tp": 4,
+    "fp": 0,
+    "tn": 0,
+    "fn": 3
+   },
+   "ngap_7": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 7,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_9": {
+    "prec": 1.0,
+    "rec": 0.909,
+    "f1": 0.952,
+    "fpr": 0.0,
+    "tp": 10,
+    "fp": 0,
+    "tn": 1,
+    "fn": 1
+   }
+  }
+ },
+ "moi": {
+  "tong": {
+   "prec": 0.76,
+   "rec": 0.987,
+   "f1": 0.859,
+   "fpr": 0.96,
+   "tp": 76,
+   "fp": 24,
+   "tn": 1,
+   "fn": 1
+  },
+  "clip": {
+   "khong_ngap_04": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 21,
+    "tn": 0,
+    "fn": 0
+   },
+   "khong_ngap_05": {
+    "prec": 0.0,
+    "rec": 0.0,
+    "f1": 0.0,
+    "fpr": 1.0,
+    "tp": 0,
+    "fp": 3,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_5": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 52,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_6": {
+    "prec": 1.0,
+    "rec": 0.857,
+    "f1": 0.923,
+    "fpr": 0.0,
+    "tp": 6,
+    "fp": 0,
+    "tn": 0,
+    "fn": 1
+   },
+   "ngap_7": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 7,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0
+   },
+   "ngap_9": {
+    "prec": 1.0,
+    "rec": 1.0,
+    "f1": 1.0,
+    "fpr": 0.0,
+    "tp": 11,
+    "fp": 0,
+    "tn": 1,
+    "fn": 0
+   }
+  }
+ },
+ "loi_moi": [
+  {
+   "clip": "khong_ngap_04",
+   "seg": 0,
+   "t": 0,
+   "label": "khong_ngap",
+   "p": 0.48,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 1,
+   "t": 2,
+   "label": "khong_ngap",
+   "p": 0.45,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 2,
+   "t": 4,
+   "label": "khong_ngap",
+   "p": 0.38,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 3,
+   "t": 6,
+   "label": "khong_ngap",
+   "p": 0.27,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 4,
+   "t": 8,
+   "label": "khong_ngap",
+   "p": 0.39,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 5,
+   "t": 10,
+   "label": "khong_ngap",
+   "p": 0.39,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 6,
+   "t": 12,
+   "label": "khong_ngap",
+   "p": 0.5,
+   "ratio": 0.93
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 7,
+   "t": 14,
+   "label": "khong_ngap",
+   "p": 0.43,
+   "ratio": 0.93
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 8,
+   "t": 16,
+   "label": "khong_ngap",
+   "p": 0.49,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 9,
+   "t": 18,
+   "label": "khong_ngap",
+   "p": 0.45,
+   "ratio": 0.96
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 10,
+   "t": 20,
+   "label": "khong_ngap",
+   "p": 0.43,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 11,
+   "t": 22,
+   "label": "khong_ngap",
+   "p": 0.46,
+   "ratio": 0.97
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 12,
+   "t": 24,
+   "label": "khong_ngap",
+   "p": 0.58,
+   "ratio": 0.98
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 13,
+   "t": 26,
+   "label": "khong_ngap",
+   "p": 0.89,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 14,
+   "t": 28,
+   "label": "khong_ngap",
+   "p": 0.7,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 15,
+   "t": 30,
+   "label": "khong_ngap",
+   "p": 0.83,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 16,
+   "t": 32,
+   "label": "khong_ngap",
+   "p": 0.73,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 17,
+   "t": 34,
+   "label": "khong_ngap",
+   "p": 0.47,
+   "ratio": 0.95
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 18,
+   "t": 36,
+   "label": "khong_ngap",
+   "p": 0.54,
+   "ratio": 0.94
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 19,
+   "t": 38,
+   "label": "khong_ngap",
+   "p": 0.37,
+   "ratio": 0.97
+  },
+  {
+   "clip": "khong_ngap_04",
+   "seg": 20,
+   "t": 40,
+   "label": "khong_ngap",
+   "p": 0.1,
+   "ratio": 0.96
+  },
+  {
+   "clip": "khong_ngap_05",
+   "seg": 0,
+   "t": 0,
+   "label": "khong_ngap",
+   "p": 0.35,
+   "ratio": 0.98
+  },
+  {
+   "clip": "khong_ngap_05",
+   "seg": 1,
+   "t": 2,
+   "label": "khong_ngap",
+   "p": 0.4,
+   "ratio": 0.98
+  },
+  {
+   "clip": "khong_ngap_05",
+   "seg": 2,
+   "t": 4,
+   "label": "khong_ngap",
+   "p": 0.4,
+   "ratio": 0.99
+  },
+  {
+   "clip": "ngap_6",
+   "seg": 9,
+   "t": 18,
+   "label": "ngap",
+   "p": 0.26,
+   "ratio": 0.0
+  }
+ ],
+ "loi_v1": [
+  [
+   "khong_ngap_04",
+   0
+  ],
+  [
+   "khong_ngap_04",
+   1
+  ],
+  [
+   "khong_ngap_04",
+   2
+  ],
+  [
+   "khong_ngap_04",
+   3
+  ],
+  [
+   "khong_ngap_04",
+   4
+  ],
+  [
+   "khong_ngap_04",
+   5
+  ],
+  [
+   "khong_ngap_04",
+   6
+  ],
+  [
+   "khong_ngap_04",
+   7
+  ],
+  [
+   "khong_ngap_04",
+   8
+  ],
+  [
+   "khong_ngap_04",
+   9
+  ],
+  [
+   "khong_ngap_04",
+   10
+  ],
+  [
+   "khong_ngap_04",
+   11
+  ],
+  [
+   "khong_ngap_04",
+   12
+  ],
+  [
+   "khong_ngap_04",
+   13
+  ],
+  [
+   "khong_ngap_04",
+   14
+  ],
+  [
+   "khong_ngap_04",
+   15
+  ],
+  [
+   "khong_ngap_04",
+   16
+  ],
+  [
+   "khong_ngap_04",
+   17
+  ],
+  [
+   "khong_ngap_04",
+   18
+  ],
+  [
+   "khong_ngap_04",
+   19
+  ],
+  [
+   "khong_ngap_04",
+   20
+  ],
+  [
+   "khong_ngap_05",
+   0
+  ],
+  [
+   "khong_ngap_05",
+   1
+  ],
+  [
+   "khong_ngap_05",
+   2
+  ],
+  [
+   "ngap_6",
+   8
+  ],
+  [
+   "ngap_6",
+   9
+  ],
+  [
+   "ngap_9",
+   1
+  ],
+  [
+   "ngap_9",
+   2
+  ],
+  [
+   "ngap_9",
+   3
+  ],
+  [
+   "ngap_9",
+   4
+  ]
+ ],
+ "loi_v3": [
+  [
+   "khong_ngap_04",
+   0
+  ],
+  [
+   "khong_ngap_04",
+   1
+  ],
+  [
+   "khong_ngap_04",
+   2
+  ],
+  [
+   "khong_ngap_04",
+   3
+  ],
+  [
+   "khong_ngap_04",
+   4
+  ],
+  [
+   "khong_ngap_04",
+   5
+  ],
+  [
+   "khong_ngap_04",
+   6
+  ],
+  [
+   "khong_ngap_04",
+   7
+  ],
+  [
+   "khong_ngap_04",
+   8
+  ],
+  [
+   "khong_ngap_04",
+   9
+  ],
+  [
+   "khong_ngap_04",
+   10
+  ],
+  [
+   "khong_ngap_04",
+   11
+  ],
+  [
+   "khong_ngap_04",
+   12
+  ],
+  [
+   "khong_ngap_04",
+   13
+  ],
+  [
+   "khong_ngap_04",
+   14
+  ],
+  [
+   "khong_ngap_04",
+   15
+  ],
+  [
+   "khong_ngap_04",
+   16
+  ],
+  [
+   "khong_ngap_04",
+   17
+  ],
+  [
+   "khong_ngap_04",
+   18
+  ],
+  [
+   "khong_ngap_04",
+   19
+  ],
+  [
+   "khong_ngap_04",
+   20
+  ],
+  [
+   "khong_ngap_05",
+   0
+  ],
+  [
+   "khong_ngap_05",
+   1
+  ],
+  [
+   "khong_ngap_05",
+   2
+  ],
+  [
+   "ngap_6",
+   8
+  ],
+  [
+   "ngap_6",
+   9
+  ],
+  [
+   "ngap_6",
+   16
+  ],
+  [
+   "ngap_9",
+   1
+  ]
+ ]
+}
