@@ -6,7 +6,7 @@ import sys
 import cv2
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
-from common import ROOT, SEG, clip_path, grab_at, n_segments, splits, video_info
+from common import ROOT, SEG, clip_path, clips, grab_at, n_segments, video_info
 
 MAXW = MAXH = 1280
 PER_PAGE = 20
@@ -26,7 +26,8 @@ def main():
     out.mkdir(exist_ok=True)
     prev = load_labels()
     rows = []
-    for clip, part in sorted(splits().items()):
+    for clip, meta in sorted(clips().items()):
+        part = meta["src"]
         path = clip_path(clip)
         info = video_info(path)
         if info is None:
@@ -35,7 +36,7 @@ def main():
         n = n_segments(info["duration"])
         times = [min(i * SEG + SEG / 2, info["duration"] - 0.05) for i in range(n)]
         frames = grab_at(path, times)
-        default = "ngap" if clip.startswith("ngap") else "khong_ngap"
+        default = meta["cls"]
         labels = []
         for i, t in enumerate(times):
             lab, note = prev.get((clip, i), (default, ""))

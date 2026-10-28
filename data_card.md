@@ -20,10 +20,11 @@ Dataset dan xuat chi dung noi bo/rieng tu (co FRED CC BY-NC-SA, BDD100K, ADE20K)
 | ADE20K water | ADE20K (nghien cuu, phi thuong mai) | 61 | 140 | 0 | mask nguoi gan; anh nuoc ngoai duong -> am |
 | COCO duong pho (work/dataset) | CC BY 4.0 (anh: theo tung anh) | 0 | 153 | 0 | am, duong kho |
 | COCO val2017 (mat dat >= 10%, khong nuoc) | CC BY 4.0 (anh: theo tung anh) | 0 | 1000 | 0 | am, ngau nhien 1000 |
-| BDD100K val qua HF dgural/bdd100k (mua, dem, ngay) | BDD100K (BSD, nghien cuu) | 0 | 824 | 728 | am; mua/dem = am kho |
-| **Tong** | | **1387** | **2400** | **1011** | |
+| BDD100K val qua HF dgural/bdd100k (mua, dem, ngay) | BDD100K (BSD, nghien cuu) | 0 | 1082 | 986 | am; mua/dem = am kho; v5: them toan bo anh mua + 300 anh dem xep hang 'dem uot' theo CLIP zero-shot (co the lan vai anh dem kho) |
+| **Tong (anh, v5)** | | **1387** | **2658** | **1269** | |
 
 'Kho' = mua (BDD rainy, ngay + dem), dem phan chieu (BDD night), bong cay tren mat nhua (FRED). Muc tieu >= 400: dat.
 
-Pexels: khong co PEXELS_API_KEY nen khong tai video. Clip khong_ngap cua nguoi dung chi dung o DEV/TEST, khong lay khung nao de train.
+Pexels: khong co PEXELS_API_KEY nen khong tai video; ~/Videos/hard_negatives/ khong ton tai.
+v5: ngoai anh, bo phan loai cuoi con train tren 3 khung/doan (1/6, 3/6, 5/6) cua 18 clip ngoai troi da duyet (bo bo_qua), nhan = nhan doan. Danh gia dung out-of-fold theo clip (loai fold chua clip do), nen khong ro ri khung vao diem danh gia. Clip ngap_4 (trong nha) bi loai.
 Kiem tra bang contact sheet 60 anh ngau nhien trong nhom 'kho' (mua/dem/bong cay): dung loai canh.

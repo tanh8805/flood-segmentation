@@ -8,9 +8,13 @@ VIDEO_DIR = Path.home() / "Videos" / "flood"
 SEG = 2.0
 
 
+def clips():
+    """Danh ba clip v5: {ten: {path, cls, src}} (clips.json). ngap_4 (gara trong nhan) va ngap_8 (trung ngap_6) khong co trong do."""
+    return json.loads((ROOT / "clips.json").read_text())
+
+
 def clip_path(name):
-    sub = "ngap" if name.startswith("ngap") else "khong_ngap"
-    return VIDEO_DIR / sub / f"{name}.mp4"
+    return Path(clips()[name]["path"])
 
 
 def splits():

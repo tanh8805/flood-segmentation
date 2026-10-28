@@ -13,3 +13,4 @@ venv/
 __pycache__/
 floodapp/outputs/
 results/*.mp4
+TASK_v5.md
